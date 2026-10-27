@@ -203,14 +203,17 @@ namespace DialMenu
             DockPanel.SetDock(footer, Dock.Bottom);
             root.Children.Add(footer);
 
-        // --- Liste ---
+            // --- Liste ---
             _list = new ListBox();
             _list.BorderThickness = new Thickness(0);
             _list.Background = Ui.Card;
             _list.Padding = new Thickness(8, 6, 8, 6);
             _list.ItemContainerStyle = RowStyle();
             _list.MouseDoubleClick += delegate { PickSelected(); };
+            ScrollViewer.SetHorizontalScrollBarVisibility(_list, ScrollBarVisibility.Disabled);
             root.Children.Add(_list);
+
+            Content = root;
         }
 
         void ScrollToGroup(string group)

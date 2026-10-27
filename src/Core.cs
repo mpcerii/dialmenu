@@ -142,10 +142,18 @@ namespace DialMenu
             {
                 if (File.Exists(FilePath))
                 {
-                    using (FileStream fs = File.OpenRead(FilePath))
+                    // Der JSON-Serier lehnt eine Datei mit Byte-Order-Mark ab.
+                    // Manche Editoren schreiben ein BOM, deshalb hier entfernen -
+                    // sonst ginge die ganze Konfiguration verloren.
+                    byte[] raw = File.ReadAllBytes(FilePath);
+                    int offset = 0;
+                    if (raw.Length >= 3 && raw[0] == 0xEF && raw[1] == 0xBB && raw[2] == 0xBF)
+                        offset = 3;
+
+                    using (MemoryStream ms = new MemoryStream(raw, offset, raw.Length - offset))
                     {
                         DataContractJsonSerializer s = new DataContractJsonSerializer(typeof(Config));
-                        Config c = (Config)s.ReadObject(fs);
+                        Config c = (Config)s.ReadObject(ms);
                         if (c != null)
                         {
                             c.Migrate();

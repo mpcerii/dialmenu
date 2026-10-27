@@ -343,18 +343,58 @@ namespace DialMenu
             }
 
             FrameworkElement page = null;
-            switch (key)
+            try
             {
-                case "profile": page = BuildProfilesPage(); break;
-                case "geraete": page = BuildDevicesPage(); break;
-                case "darstellung": page = BuildAppearancePage(); break;
-                case "verhalten": page = BuildBehaviorPage(); break;
-                case "ueber": page = BuildAboutPage(); break;
-                default: page = BuildCommandsPage(); break;
+                switch (key)
+                {
+                    case "profile": page = BuildProfilesPage(); break;
+                    case "geraete": page = BuildDevicesPage(); break;
+                    case "darstellung": page = BuildAppearancePage(); break;
+                    case "verhalten": page = BuildBehaviorPage(); break;
+                    case "ueber": page = BuildAboutPage(); break;
+                    default: page = BuildCommandsPage(); break;
+                }
+            }
+            catch (Exception ex)
+            {
+                // Ohne diesen Schutz bleibt der Bereich leer und weiss - der
+                // Anwender sieht nicht, dass etwas schiefging.
+                Log.Write("Seite \"" + key + "\" konnte nicht aufgebaut werden: " + ex);
+                page = BuildErrorPage(key, ex);
             }
 
             _pageHost.Children.Clear();
             if (page != null) _pageHost.Children.Add(page);
+        }
+
+        FrameworkElement BuildErrorPage(string key, Exception ex)
+        {
+            StackPanel body = PageBody();
+            body.Children.Add(PageHeader("Diese Seite ließ sich nicht aufbauen", null, null));
+
+            Border card = CardBox();
+            StackPanel inner = new StackPanel();
+            inner.Margin = new Thickness(18, 16, 18, 18);
+
+            TextBlock head = Ui.Text("Fehler beim Aufbau von „" + key + "“", 13, Ui.Ink);
+            head.FontWeight = FontWeights.SemiBold;
+            inner.Children.Add(head);
+
+            TextBlock message = Ui.Text(ex.Message, 12, Ui.InkSoft);
+            message.TextWrapping = TextWrapping.Wrap;
+            message.Margin = new Thickness(0, 6, 0, 0);
+            inner.Children.Add(message);
+
+            TextBlock hint = Ui.Text(
+                "Der Fehler steht im Protokoll. Über „Über“ lässt es sich öffnen.",
+                11.5, Ui.InkMuted);
+            hint.TextWrapping = TextWrapping.Wrap;
+            hint.Margin = new Thickness(0, 10, 0, 0);
+            inner.Children.Add(hint);
+
+            card.Child = inner;
+            body.Children.Add(card);
+            return body;
         }
 
         // ==================================================================
@@ -649,8 +689,8 @@ namespace DialMenu
             // --- Kopf mit Profilauswahl ---
             StackPanel head = new StackPanel();
             head.Margin = new Thickness(30, 26, 30, 18);
-            head.MaxWidth = 1060;
-            head.HorizontalAlignment = HorizontalAlignment.Left;
+            head.MaxWidth = 1000;
+            head.HorizontalAlignment = HorizontalAlignment.Stretch;
 
             Grid headGrid = new Grid();
             headGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -707,9 +747,9 @@ namespace DialMenu
             // --- Inhalt: Liste und Editor ---
             Grid body = new Grid();
             body.Margin = new Thickness(30, 0, 30, 26);
-            body.MaxWidth = 1060;
-            body.HorizontalAlignment = HorizontalAlignment.Left;
-            body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(320) });
+            body.MaxWidth = 1000;
+            body.HorizontalAlignment = HorizontalAlignment.Stretch;
+            body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(300) });
             body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(20) });
             body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             Grid.SetRow(body, 1);
@@ -810,6 +850,10 @@ namespace DialMenu
             _actionList.Background = Ui.Card;
             _actionList.Padding = new Thickness(4);
             _actionList.ItemContainerStyle = Ui.ListRowStyle();
+            // Ohne diese beiden Angaben schiebt eine lange Zeile die Liste
+            // waagerecht auf und die Pruefhinweise werden abgeschnitten.
+            ScrollViewer.SetHorizontalScrollBarVisibility(_actionList, ScrollBarVisibility.Disabled);
+            ScrollViewer.SetVerticalScrollBarVisibility(_actionList, ScrollBarVisibility.Auto);
             _actionList.SelectionChanged += delegate
             {
                 if (_loading) return;
@@ -1153,10 +1197,10 @@ namespace DialMenu
             block.Margin = new Thickness(0, 16, 0, 0);
             block.Children.Add(SectionLabel("Symbol"));
 
+            // Obere Zeile: Vorschau und Beschriftung.
             Grid row = new Grid();
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
             Border well = new Border();
             well.Width = 38;
@@ -1175,7 +1219,9 @@ namespace DialMenu
 
             StackPanel iconText = new StackPanel();
             iconText.VerticalAlignment = VerticalAlignment.Center;
-            iconText.Margin = new Thickness(12, 0, 12, 0);
+            iconText.Margin = new Thickness(12, 0, 0, 0);
+            Grid.SetColumn(iconText, 1);
+            row.Children.Add(iconText);
 
             _iconName = Ui.Text(
                 string.IsNullOrEmpty(item.Icon) ? "Automatisch nach Art und Ziel"
@@ -1186,21 +1232,22 @@ namespace DialMenu
 
             TextBlock iconNote = Ui.Text("Ohne Auswahl bestimmt DialMenu das Symbol selbst.",
                 11, Ui.InkMuted);
+            iconNote.TextWrapping = TextWrapping.Wrap;
             iconText.Children.Add(iconNote);
 
-            Grid.SetColumn(iconText, 1);
-            row.Children.Add(iconText);
+            block.Children.Add(row);
 
-            StackPanel iconButtons = new StackPanel();
-            iconButtons.Orientation = Orientation.Horizontal;
-            iconButtons.VerticalAlignment = VerticalAlignment.Center;
+            // Untere Zeile: Schaltflächen umbrechen, statt die Karte zu sprengen.
+            WrapPanel iconButtons = new WrapPanel();
+            iconButtons.Margin = new Thickness(0, 10, 0, 0);
 
             Button pick = Ui.SmallButton("Symbol wählen…");
+            pick.Margin = new Thickness(0, 0, 6, 6);
             pick.Click += delegate { PickIcon(item); };
             iconButtons.Children.Add(pick);
 
             Button resetIcon = Ui.SmallButton("Zurücksetzen");
-            resetIcon.Margin = new Thickness(6, 0, 0, 0);
+            resetIcon.Margin = new Thickness(0, 0, 0, 6);
             resetIcon.Click += delegate
             {
                 item.Icon = "";
@@ -1210,10 +1257,7 @@ namespace DialMenu
             };
             iconButtons.Children.Add(resetIcon);
 
-            Grid.SetColumn(iconButtons, 2);
-            row.Children.Add(iconButtons);
-
-            block.Children.Add(row);
+            block.Children.Add(iconButtons);
             return block;
         }
 
