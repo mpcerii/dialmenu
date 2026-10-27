@@ -614,7 +614,7 @@ namespace DialMenu
         static readonly string[] Kinds =
         {
             "program", "url", "shell", "hotkey", "media",
-            "volume", "system", "activate", "macro"
+            "volume", "system", "activate", "discord", "macro"
         };
 
         static readonly string[] KindLabels =
@@ -627,6 +627,7 @@ namespace DialMenu
             "Lautstärke",
             "Systemfunktion",
             "Fenster in den Vordergrund",
+            "Discord",
             "Makro"
         };
 
@@ -1251,6 +1252,11 @@ namespace DialMenu
                     return "lock, sleep, showdesktop, taskmgr, shutdown, restart oder logoff";
                 case "activate":
                     return "Teil des Fenstertitels oder Programmname, zum Beispiel spotify";
+                case "discord":
+                    return "Ziel: toggle (Discords eigene Taste, Anzeige stimmt), mute oder unmute " +
+                        "(systemweit, ohne Anzeige in Discord) sowie deafen oder toggledeafen. " +
+                        "In den Argumenten steht optional die Tastenkombination aus Discord; " +
+                        "ohne Angabe gilt Strg+Shift+M.";
                 case "macro":
                     return "Ein Makro braucht kein Ziel – die Ablaufschritte zählen.";
             }
@@ -1265,7 +1271,8 @@ namespace DialMenu
             if (_macroBlock != null)
                 _macroBlock.Visibility = isMacro ? Visibility.Visible : Visibility.Collapsed;
 
-            bool showArgs = item.Kind == "program" || item.Kind == "shell" || item.Kind == "volume";
+            bool showArgs = item.Kind == "program" || item.Kind == "shell"
+                || item.Kind == "volume" || item.Kind == "discord";
             if (_argsBlock != null)
                 _argsBlock.Visibility = showArgs ? Visibility.Visible : Visibility.Collapsed;
 

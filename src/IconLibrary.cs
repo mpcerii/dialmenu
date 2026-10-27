@@ -612,6 +612,15 @@ namespace DialMenu
             if (k == "macro") return PlayPause;
             if (k == "shell" || k == "script") return Terminal;
 
+            if (k == "discord")
+            {
+                if (t == "deafen" || t == "undeafen" || t == "toggledeafen"
+                    || l.Contains("taub")) return Headphones;
+                if (t == "mute" || t == "unmute" || t == "toggle"
+                    || l.Contains("stumm") || l.Contains("mikro")) return Microphone;
+                return Chat;
+            }
+
             if (k == "system")
             {
                 if (t.Contains("showdesktop")) return Desktop;

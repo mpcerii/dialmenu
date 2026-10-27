@@ -73,6 +73,7 @@ namespace DialMenu
                     case "system": RunSystem(a.Target); break;
                     case "activate": ActivateWindow(a.Target); break;
                     case "macro": RunMacro(a); break;
+                    case "discord": RunDiscord(a.Target, a.Args); break;
                     default:
                         Log.Write("Unbekannte Aktionsart: " + a.Kind);
                         break;
@@ -137,9 +138,8 @@ namespace DialMenu
 
         // ---- Tastenkombination ----
 
-        static void SendHotkey(string combo)
-        {
-            List<ushort> mods;
+        public static void SendHotkey(string combo)
+        {            List<ushort> mods;
             ushort vk;
             if (!TryParseHotkey(combo, out mods, out vk))
             {
@@ -260,6 +260,66 @@ namespace DialMenu
             }
         }
 
+        // ------------------------------------------------------------------
+        // Discord
+        // ------------------------------------------------------------------
+
+        // Target: mute | unmute | toggle | deafen | undeafen | toggledeafen
+        // Args:   optionale Tastenkombination, die in Discord hinterlegt ist.
+        //         Ohne Angabe gilt Discords Voreinstellung (Ctrl+Shift+M).
+        //
+        // Wichtig: Discords Taste ist ein Umschalter. "mute" und "unmute"
+        // lassen sich damit nicht gezielt ausloesen, ohne den Zustand zu
+        // kennen. Deshalb gilt:
+        //   toggle  -> Discords eigene Taste (Zustand stimmt inkl. Anzeige)
+        //   mute    -> Mikrofon auf Windows-Ebene stumm
+        //   unmute  -> Mikrofon auf Windows-Ebene laut
+        static void RunDiscord(string target, string args)
+        {
+            string action = Norm(target);
+
+            switch (action)
+            {
+                case "toggle":
+                case "mute2":
+                    if (!Discord.IsRunning())
+                    {
+                        Log.Write("Discord laeuft nicht - nutze das Systemmikrofon.");
+                        Discord.ToggleSystemMicMute();
+                        return;
+                    }
+                    Discord.SendMuteHotkey(Clean(args));
+                    break;
+
+                case "mute":
+                    if (!Discord.IsRunning())
+                        Log.Write("Discord laeuft nicht - schalte das Systemmikrofon stumm.");
+                    Discord.SetSystemMicMute(true);
+                    break;
+
+                case "unmute":
+                    if (!Discord.IsRunning())
+                        Log.Write("Discord laeuft nicht - schalte das Systemmikrofon laut.");
+                    Discord.SetSystemMicMute(false);
+                    break;
+
+                case "deafen":
+                case "undeafen":
+                case "toggledeafen":
+                    if (!Discord.IsRunning())
+                    {
+                        Log.Write("Discord laeuft nicht - Taubschalten entfaellt.");
+                        return;
+                    }
+                    Discord.SendDeafenHotkey(Clean(args));
+                    break;
+
+                default:
+                    Log.Write("Discord: unbekannte Aktion \"" + target + "\".");
+                    break;
+            }
+        }
+
         static void RunTool(string file, string args)
         {
             ProcessStartInfo psi = new ProcessStartInfo();
@@ -280,7 +340,7 @@ namespace DialMenu
 
         // ---- Fenster aktivieren ----
 
-        static void ActivateWindow(string query)
+        public static void ActivateWindow(string query)
         {
             string q = Clean(query);
             if (q.Length == 0) { Log.Write("Fenster ohne Titel."); return; }
@@ -322,7 +382,7 @@ namespace DialMenu
 
         static void ForceForeground(IntPtr hWnd)
         {
-            if (IsIconic(hWnd)) ShowWindow(hWnd, SW_RESTORE);
+            if (IsIconic(hWnd)) ShowWindow(hWnd, SW_RESTORE);            if (IsIconic(hWnd)) ShowWindow(hWnd, SW_RESTORE);
 
             IntPtr fg = GetForegroundWindow();
             if (fg == hWnd) return;
@@ -352,6 +412,51 @@ namespace DialMenu
             StringBuilder sb = new StringBuilder(len + 2);
             GetWindowText(hWnd, sb, sb.Capacity);
             return sb.ToString();
+        }
+
+        // ------------------------------------------------------------------
+        // Fenster fuer einen kurzen Tastendruck nach vorn holen und danach
+        // den vorherigen Fokus wiederherstellen. Discord ignoriert globale
+        // Tasten, solange es nicht im Vordergrund ist.
+        // ------------------------------------------------------------------
+
+        static IntPtr _previousForeground = IntPtr.Zero;
+
+        public static bool FocusWindowByProcess(string processName)
+        {
+            if (string.IsNullOrEmpty(processName)) return false;
+
+            IntPtr found = IntPtr.Zero;
+            string wanted = processName.ToLowerInvariant();
+
+            EnumWindows(delegate(IntPtr hWnd, IntPtr lParam)
+            {
+                if (!IsWindowVisible(hWnd)) return true;
+                if (GetWindowTextLength(hWnd) == 0) return true;
+
+                string proc = WindowProcessName(hWnd);
+                if (!string.IsNullOrEmpty(proc) && proc.ToLowerInvariant() == wanted)
+                {
+                    found = hWnd;
+                    return false;
+                }
+                return true;
+            }, IntPtr.Zero);
+
+            if (found == IntPtr.Zero) return false;
+            if (GetForegroundWindow() == found) { _previousForeground = found; return true; }
+
+            _previousForeground = GetForegroundWindow();
+            ForceForeground(found);
+            return true;
+        }
+
+        public static void RestoreFocus()
+        {
+            if (_previousForeground == IntPtr.Zero) return;
+            if (_previousForeground == GetForegroundWindow()) return;
+            ForceForeground(_previousForeground);
+            _previousForeground = IntPtr.Zero;
         }
 
         static string WindowProcessName(IntPtr hWnd)
@@ -865,6 +970,30 @@ namespace DialMenu
                         errors.Add("Fenster: Bitte einen Fenstertitel oder Prozessnamen angeben.");
                     break;
 
+                case "discord":
+                {
+                    string[] allowed = { "toggle", "mute", "unmute",
+                                         "deafen", "undeafen", "toggledeafen" };
+                    bool known = false;
+                    foreach (string s in allowed)
+                        if (s == target) { known = true; break; }
+
+                    if (!known)
+                        errors.Add("Discord: Unbekannte Aktion \"" + target +
+                            "\". Erlaubt: toggle, mute, unmute, deafen, undeafen, toggledeafen.");
+
+                    string extra = Clean(a.Args);
+                    if (extra.Length > 0)
+                    {
+                        List<ushort> mods;
+                        ushort vk;
+                        if (!TryParseHotkey(extra, out mods, out vk))
+                            errors.Add("Discord: Die Tastenkombination \"" + extra +
+                                "\" konnte nicht gelesen werden. Beispiel: Ctrl+Shift+M.");
+                    }
+                    break;
+                }
+
                 case "macro":
                     if (a.Steps == null || a.Steps.Count == 0)
                     {
@@ -997,6 +1126,20 @@ namespace DialMenu
 
                 case "activate":
                     return target.Length > 0 ? "Fenster aktivieren: " + target : "Fenster ohne Titel";
+
+                case "discord":
+                {
+                    string extra = Clean(a.Args);
+                    string note = extra.Length > 0 ? extra : Discord.DefaultMuteHotkey;
+
+                    if (target == "toggle")
+                        return "Discord: Stummschalten umschalten (" + note + ")";
+                    if (target == "mute") return "Discord: Mikrofon stumm (systemweit)";
+                    if (target == "unmute") return "Discord: Mikrofon laut (systemweit)";
+                    if (target == "deafen" || target == "undeafen" || target == "toggledeafen")
+                        return "Discord: Taubschalten umschalten (" + note + ")";
+                    return "Discord: " + (target.Length > 0 ? target : "unbekannt");
+                }
 
                 case "macro":
                 {

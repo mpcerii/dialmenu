@@ -79,6 +79,12 @@ namespace DialMenu
             list.Add(new Entry("Bearbeiten", "Alles auswählen", "hotkey", "Ctrl+A", ""));
             list.Add(new Entry("Bearbeiten", "Speichern", "hotkey", "Ctrl+S", ""));
 
+            // --- Discord ---
+            list.Add(new Entry("Discord", "Stummschalten umschalten", "discord", "toggle", ""));
+            list.Add(new Entry("Discord", "Taubschalten umschalten", "discord", "toggledeafen", ""));
+            list.Add(new Entry("Discord", "Mikrofon stumm (systemweit)", "discord", "mute", ""));
+            list.Add(new Entry("Discord", "Mikrofon laut (systemweit)", "discord", "unmute", ""));
+
             // --- Makros ---
             list.Add(new Entry("Makros", "Leeres Makro", "macro", "", ""));
 
