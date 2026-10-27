@@ -1,0 +1,65 @@
+<Project ToolsVersion="4.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <ProjectGuid>{9E1C4A02-7B33-4F5D-8A61-2D9E6C5B1A47}</ProjectGuid>
+    <OutputType>WinExe</OutputType>
+    <RootNamespace>DialMenu</RootNamespace>
+    <AssemblyName>DialMenu</AssemblyName>
+    <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+    <StartupObject>DialMenu.DialMenuApp</StartupObject>
+    <LangVersion>5</LangVersion>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <Optimize>true</Optimize>
+    <DebugType>none</DebugType>
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+    <Deterministic>true</Deterministic>
+    <!-- Quelldateien sind UTF-8 ohne BOM; ohne diese Angabe liest csc sie als ANSI
+         und Umlaute sowie Gedankenstriche landen als Zeichensalat im Log. -->
+    <CodePage>65001</CodePage>
+    <Utf8Output>true</Utf8Output>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)' == ''">
+    <Configuration>Release</Configuration>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|AnyCPU'">
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|AnyCPU'">
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <WarningLevel>4</WarningLevel>
+    <DebugType>full</DebugType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Data" />
+    <Reference Include="System.Drawing" />
+    <Reference Include="System.Runtime.Serialization" />
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Xml" />
+    <Reference Include="WindowsBase" />
+    <Reference Include="PresentationCore" />
+    <Reference Include="PresentationFramework" />
+    <Reference Include="System.Xaml" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="src\Core.cs" />
+    <Compile Include="src\Presets.cs" />
+    <Compile Include="src\Commands.cs" />
+    <Compile Include="src\IconLibrary.cs" />
+    <Compile Include="src\InputEngine.cs" />
+    <Compile Include="src\OverlayWindow.cs" />
+    <Compile Include="src\SettingsWindow.cs" />
+    <Compile Include="src\PresetWindow.cs" />
+    <Compile Include="src\MacroEditor.cs" />
+    <Compile Include="src\App.cs" />
+  </ItemGroup>
+
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+</Project>

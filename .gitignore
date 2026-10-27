@@ -1,0 +1,14 @@
+# Build-Ausgabe
+bin/
+obj/
+*.user
+*.suo
+.vs/
+
+# Logs und lokale Konfiguration
+*.log
+config.json
+
+# Werkzeuge
+scratch*/
+*.png
