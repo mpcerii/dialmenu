@@ -64,7 +64,7 @@ namespace DialMenu
         {
             _onPick = onPick;
 
-            Title = "Befehl hinzufügen";
+            Title = Strings.Get("presets.title");
             Width = 560;
             Height = 620;
             MinWidth = 460;
@@ -111,11 +111,9 @@ namespace DialMenu
             header.Padding = new Thickness(20, 16, 20, 14);
 
             StackPanel head = new StackPanel();
-            head.Children.Add(Ui.Heading("Befehl hinzufügen", 16));
+            head.Children.Add(Ui.Heading(Strings.Get("presets.title"), 16));
 
-            TextBlock sub = Ui.Text(
-                "Ein fertiger Befehl, ein installiertes Programm oder ein eigener Eintrag.",
-                12, Ui.InkMuted);
+            TextBlock sub = Ui.Text(Strings.Get("presets.subtitle"), 12, Ui.InkMuted);
             sub.Margin = new Thickness(0, 2, 0, 12);
             head.Children.Add(sub);
 
@@ -126,15 +124,15 @@ namespace DialMenu
             _search = Ui.TextField();
             _search.FontSize = 13;
             _search.Padding = new Thickness(10, 7, 10, 7);
-            _search.ToolTip = "Nach Name, Gruppe oder Ziel suchen";
+            _search.ToolTip = Strings.Get("presets.searchTip");
             _search.TextChanged += delegate { Fill(_search.Text); };
             searchRow.Children.Add(_search);
 
-            _searchHint = Ui.Text("Suchen", 11, Ui.InkMuted);
+            _searchHint = Ui.Text(Strings.Get("common.search"), 11, Ui.InkMuted);
             _searchHint.VerticalAlignment = VerticalAlignment.Center;
             _searchHint.Margin = new Thickness(10, 0, 0, 0);
             _searchHint.Cursor = Cursors.Hand;
-            _searchHint.ToolTip = "Alle installierten Programme anzeigen";
+            _searchHint.ToolTip = Strings.Get("presets.showInstalled");
             _searchHint.MouseLeftButtonUp += delegate
             {
                 if (_mode == "installed") ShowPresetMode();
@@ -176,9 +174,9 @@ namespace DialMenu
             foot.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             foot.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-            Button custom = Ui.Button("Eigener Befehl…");
+            Button custom = Ui.Button(Strings.Get("presets.custom"));
             custom.HorizontalAlignment = HorizontalAlignment.Left;
-            custom.ToolTip = "Leeren Befehl anlegen und selbst ausfüllen.";
+            custom.ToolTip = Strings.Get("presets.customTip");
             custom.IsDefault = false;
             custom.Click += delegate { PickCustom(); };
             foot.Children.Add(custom);
@@ -186,12 +184,12 @@ namespace DialMenu
             StackPanel buttons = new StackPanel();
             buttons.Orientation = Orientation.Horizontal;
 
-            Button cancel = Ui.Button("Abbrechen");
+            Button cancel = Ui.Button(Strings.Get("common.cancel"));
             cancel.Margin = new Thickness(0, 0, 8, 0);
             cancel.Click += delegate { Close(); };
             buttons.Children.Add(cancel);
 
-            Button add = Ui.PrimaryButton("Hinzufügen");
+            Button add = Ui.PrimaryButton(Strings.Get("common.add"));
             add.IsDefault = true;
             add.Click += delegate { PickSelected(); };
             buttons.Children.Add(add);
@@ -289,13 +287,41 @@ namespace DialMenu
             {
                 Presets.Entry e = entries[i];
                 Item item = new Item();
-                item.Group = e.Group;
-                item.Label = e.Label;
+                item.Group = LocalizeGroup(e.Group);
+                item.Label = Localize("presets.label.", e.Label);
                 item.Kind = e.Kind;
                 item.Target = e.Target;
                 item.Args = e.Args;
                 _presets.Add(item);
             }
+        }
+
+        // Die kuratierten Befehle stehen in Presets.cs auf Deutsch; hier
+        // bekommen Gruppe und Bezeichnung ihre Fassung in der aktuellen
+        // Sprache. Fehlt ein Eintrag, bleibt der deutsche Text stehen.
+        static string Localize(string prefix, string value)
+        {
+            if (string.IsNullOrEmpty(value)) return value;
+            string key = prefix + value;
+            return Strings.Has(key) ? Strings.Get(key) : value;
+        }
+
+        static string LocalizeGroup(string group)
+        {
+            if (string.IsNullOrEmpty(group)) return group;
+            string key;
+            switch (group)
+            {
+                case "Fenster": key = "presets.group.fenster"; break;
+                case "System": key = "presets.group.system"; break;
+                case "Programme": key = "presets.group.programme"; break;
+                case "Medien": key = "presets.group.medien"; break;
+                case "Bearbeiten": key = "presets.group.bearbeiten"; break;
+                case "Discord": key = "presets.group.discord"; break;
+                case "Makros": key = "presets.group.makros"; break;
+                default: return group;
+            }
+            return Strings.Get(key);
         }
 
         // ==================================================================
@@ -305,7 +331,7 @@ namespace DialMenu
         void StartInstalledSearch()
         {
             if (_installedLoaded) return;
-            if (_status != null) _status.Text = "Programme werden gesucht …";
+            if (_status != null) _status.Text = Strings.Get("presets.searching");
 
             Thread worker = new Thread(delegate()
             {
@@ -346,8 +372,10 @@ namespace DialMenu
                         if (_closed) return;
                         if (_status != null)
                             _status.Text = _installed.Count == 0
-                                ? "Keine installierten Programme gefunden"
-                                : _installed.Count + " Programme gefunden";
+                                ? Strings.Get("presets.noneInstalled")
+                                : _installed.Count == 1
+                                    ? Strings.Get("presets.foundOne")
+                                    : Strings.Format("presets.foundMany", _installed.Count);
                         Fill(_search == null ? "" : _search.Text);
                     }));
                 }
@@ -380,8 +408,8 @@ namespace DialMenu
                     lock (_installedLock) ready = _installedLoaded;
 
                     TextBlock empty = Ui.Text(
-                        ready ? "Keine Programme gefunden."
-                            : "Die Programme werden noch gesucht …",
+                        ready ? Strings.Get("presets.emptyInstalled")
+                            : Strings.Get("presets.stillSearching"),
                         12, Ui.InkMuted);
                     empty.Margin = new Thickness(12, 14, 12, 14);
                     _list.Items.Add(WrapRow(empty));
@@ -398,7 +426,7 @@ namespace DialMenu
                 if (query.Length > 0 && shown == 0)
                 {
                     TextBlock empty = Ui.Text(
-                        "Kein Befehl und kein Programm gefunden.", 12, Ui.InkMuted);
+                        Strings.Get("presets.emptySearch"), 12, Ui.InkMuted);
                     empty.Margin = new Thickness(12, 14, 12, 14);
                     _list.Items.Add(WrapRow(empty));
                 }
@@ -409,8 +437,10 @@ namespace DialMenu
 
             if (_count != null)
             {
-                string suffix = _mode == "installed" ? " Programme" : " Einträge";
-                _count.Text = (shown == 1 ? "1" : shown.ToString()) + suffix;
+                _count.Text = shown == 1
+                    ? Strings.Get(_mode == "installed" ? "presets.countProgramOne" : "presets.countEntryOne")
+                    : Strings.Format(_mode == "installed" ? "presets.countProgramMany" : "presets.countEntryMany",
+                        shown);
             }
 
             UpdateModeLabel();
@@ -420,10 +450,11 @@ namespace DialMenu
         void UpdateModeLabel()
         {
             if (_searchHint == null) return;
-            _searchHint.Text = _mode == "installed" ? "Fertige Befehle" : "Installierte Programme";
+            _searchHint.Text = _mode == "installed"
+                ? Strings.Get("presets.modePresets") : Strings.Get("presets.modeInstalled");
             _searchHint.ToolTip = _mode == "installed"
-                ? "Zurück zu den fertigen Befehlen"
-                : "Alle installierten Programme anzeigen";
+                ? Strings.Get("presets.backToPresets")
+                : Strings.Get("presets.showInstalled");
         }
 
         static ListBoxItem WrapRow(FrameworkElement content)
@@ -479,7 +510,7 @@ namespace DialMenu
                 if (!header)
                 {
                     header = true;
-                    _list.Items.Add(RowForHeader("INSTALLIERTE PROGRAMME"));
+                    _list.Items.Add(RowForHeader(Strings.Get("presets.installedHeader")));
                 }
 
                 _list.Items.Add(RowForItem(item));
@@ -567,7 +598,7 @@ namespace DialMenu
 
             if (item.Installed)
             {
-                TextBlock tag = Ui.Text("Installiert", 10, Ui.InkMuted);
+                TextBlock tag = Ui.Text(Strings.Get("presets.installed"), 10, Ui.InkMuted);
                 tag.VerticalAlignment = VerticalAlignment.Center;
                 tag.Margin = new Thickness(8, 0, 0, 0);
                 Grid.SetColumn(tag, 2);
@@ -599,7 +630,7 @@ namespace DialMenu
                 "M12,5 V19 M5,12 H19", 17, Ui.InkSoft);
             line.Children.Add(icon);
 
-            TextBlock label = Ui.Text("Eigener Befehl…", 12.5, Ui.InkSoft);
+            TextBlock label = Ui.Text(Strings.Get("presets.custom"), 12.5, Ui.InkSoft);
             label.VerticalAlignment = VerticalAlignment.Center;
             label.Margin = new Thickness(8, 0, 0, 0);
             line.Children.Add(label);
@@ -611,7 +642,7 @@ namespace DialMenu
 
             Item tag = new Item();
             tag.IsCustom = true;
-            tag.Label = "Eigener Befehl";
+            tag.Label = Strings.Get("presets.customCommand");
             row.Tag = tag;
             return row;
         }
@@ -656,13 +687,13 @@ namespace DialMenu
 
             switch (item.Kind)
             {
-                case "hotkey": return "Tastenkombination " + item.Target;
-                case "program": return "Programm " + item.Target;
-                case "url": return "Öffnen: " + item.Target;
-                case "media": return "Mediensteuerung";
-                case "volume": return "Lautstärke";
-                case "system": return "Systemfunktion";
-                case "macro": return "Mehrere Schritte nacheinander";
+                case "hotkey": return Strings.Format("presets.detailHotkey", item.Target);
+                case "program": return Strings.Format("presets.detailProgram", item.Target);
+                case "url": return Strings.Format("presets.detailOpen", item.Target);
+                case "media": return Strings.Get("presets.detailMedia");
+                case "volume": return Strings.Get("presets.detailVolume");
+                case "system": return Strings.Get("presets.detailSystem");
+                case "macro": return Strings.Get("presets.detailMacro");
             }
             return item.Target;
         }
@@ -726,7 +757,7 @@ namespace DialMenu
             _picked = true;
 
             ActionItem action = new ActionItem();
-            action.Label = "Neuer Befehl";
+            action.Label = Strings.Get("commands.newCommand");
             action.Kind = "program";
 
             if (_onPick != null) _onPick(action);

@@ -23,7 +23,10 @@ namespace DialMenu
         static readonly Brush AccentSoft = Tokens.Selected;
 
         internal static readonly string[] Types = { "hotkey", "text", "delay", "program" };
-        internal static readonly string[] TypeLabels = { "Tastenkombination", "Text", "Pause", "Programm" };
+        internal static readonly string[] TypeKeys =
+        {
+            "macro.type.hotkey", "macro.type.text", "macro.type.delay", "macro.type.program"
+        };
 
         readonly List<MacroStep> _steps;
         readonly List<MacroStep> _original;
@@ -45,7 +48,7 @@ namespace DialMenu
             _original = new List<MacroStep>();
             foreach (MacroStep s in steps) _original.Add(s.Clone());
 
-            Title = "Schritte bearbeiten";
+            Title = Strings.Get("macro.title");
             Width = 620;
             Height = 520;
             MinWidth = 540;
@@ -59,7 +62,16 @@ namespace DialMenu
 
             BuildUi(actionLabel);
             RefreshList();
-            if (_steps.Count > 0) _list.SelectedIndex = 0;
+
+            // RefreshList setzt die Auswahl bereits waehrend _loading; das
+            // SelectionChanged-Ereignis faellt dadurch aus. Ohne diesen
+            // Aufruf bliebe das Formular rechts leer.
+            if (_steps.Count > 0)
+            {
+                _index = 0;
+                _list.SelectedIndex = 0;
+                ShowStep(_steps[0]);
+            }
             else ShowStep(null);
         }
 
@@ -81,14 +93,14 @@ namespace DialMenu
 
             StackPanel headStack = new StackPanel();
             TextBlock title = new TextBlock();
-            title.Text = string.IsNullOrEmpty(actionLabel) ? "Makro" : actionLabel;
+            title.Text = string.IsNullOrEmpty(actionLabel) ? Strings.Get("macro.macro") : actionLabel;
             title.FontSize = 15;
             title.FontWeight = FontWeights.SemiBold;
             title.Foreground = Ink;
             headStack.Children.Add(title);
 
             TextBlock sub = new TextBlock();
-            sub.Text = "Die Schritte laufen von oben nach unten. Die Pause folgt jeweils nach dem Schritt.";
+            sub.Text = Strings.Get("macro.subtitle");
             sub.FontSize = 12;
             sub.Foreground = InkMuted;
             sub.Margin = new Thickness(0, 2, 0, 0);
@@ -110,14 +122,14 @@ namespace DialMenu
             foot.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             foot.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-            Button done = Ui.PrimaryButton("Fertig");
+            Button done = Ui.PrimaryButton(Strings.Get("macro.done"));
             done.Click += delegate { Close(); };
             Grid.SetColumn(done, 1);
             foot.Children.Add(done);
 
-            Button reset = Ui.Button("Neu laden");
+            Button reset = Ui.Button(Strings.Get("macro.reload"));
             reset.HorizontalAlignment = HorizontalAlignment.Left;
-            reset.ToolTip = "Verwirft Änderungen und stellt die Schritte beim Öffnen wieder her.";
+            reset.ToolTip = Strings.Get("macro.reloadTip");
             reset.Click += delegate { ReloadFromOriginal(); };
             foot.Children.Add(reset);
 
@@ -136,7 +148,7 @@ namespace DialMenu
             DockPanel left = new DockPanel();
             left.LastChildFill = true;
 
-            TextBlock stepsCaption = Ui.Caption("Schritte");
+            TextBlock stepsCaption = Ui.Caption(Strings.Get("macro.steps"));
             stepsCaption.Margin = new Thickness(0, 0, 0, 6);
             DockPanel.SetDock(stepsCaption, Dock.Top);
             left.Children.Add(stepsCaption);
@@ -146,16 +158,16 @@ namespace DialMenu
             tools.Margin = new Thickness(0, 8, 0, 0);
             DockPanel.SetDock(tools, Dock.Bottom);
 
-            Button add = Ui.SmallButton("Hinzufügen");
+            Button add = Ui.SmallButton(Strings.Get("macro.add"));
             add.Click += delegate { AddStep(); };
             tools.Children.Add(add);
 
-            Button up = Ui.SmallButton("Hoch");
+            Button up = Ui.SmallButton(Strings.Get("macro.up"));
             up.Margin = new Thickness(6, 0, 0, 0);
             up.Click += delegate { MoveStep(-1); };
             tools.Children.Add(up);
 
-            Button down = Ui.SmallButton("Runter");
+            Button down = Ui.SmallButton(Strings.Get("macro.down"));
             down.Margin = new Thickness(6, 0, 0, 0);
             down.Click += delegate { MoveStep(1); };
             tools.Children.Add(down);
@@ -182,7 +194,7 @@ namespace DialMenu
             // Rechte Spalte: Schritt
             StackPanel right = new StackPanel();
 
-            TextBlock detailCaption = Ui.Caption("Schritt");
+            TextBlock detailCaption = Ui.Caption(Strings.Get("macro.step"));
             detailCaption.Margin = new Thickness(0, 0, 0, 8);
             right.Children.Add(detailCaption);
 
@@ -196,7 +208,7 @@ namespace DialMenu
             StackPanel form = new StackPanel();
 
             _type = Ui.Combo();
-            for (int i = 0; i < TypeLabels.Length; i++) _type.Items.Add(TypeLabels[i]);
+            for (int i = 0; i < TypeKeys.Length; i++) _type.Items.Add(Strings.Get(TypeKeys[i]));
             _type.SelectionChanged += delegate
             {
                 if (_loading || _index < 0 || _index >= _steps.Count) return;
@@ -213,9 +225,9 @@ namespace DialMenu
                     Changed();
                 }
             };
-            form.Children.Add(Ui.Field("Art", _type));
+            form.Children.Add(Ui.Field(Strings.Get("macro.kind"), _type));
 
-            _valueCaption = Ui.Caption("Wert");
+            _valueCaption = Ui.Caption(Strings.Get("macro.value"));
             _valueCaption.Margin = new Thickness(0, 13, 0, 4);
 
             _value = Ui.TextField();
@@ -245,7 +257,7 @@ namespace DialMenu
             };
 
             StackPanel delayBlock = new StackPanel();
-            TextBlock delayCaption = Ui.Caption("Pause danach (ms)");
+            TextBlock delayCaption = Ui.Caption(Strings.Get("macro.delayAfter"));
             delayCaption.Margin = new Thickness(0, 0, 0, 4);
             delayBlock.Children.Add(delayCaption);
             delayBlock.Children.Add(_delay);
@@ -261,7 +273,7 @@ namespace DialMenu
             _summary.Margin = new Thickness(0, 12, 0, 0);
             right.Children.Add(_summary);
 
-            Button remove = Ui.Button("Schritt entfernen");
+            Button remove = Ui.Button(Strings.Get("macro.remove"));
             remove.HorizontalAlignment = HorizontalAlignment.Left;
             remove.Margin = new Thickness(0, 16, 0, 0);
             remove.Click += delegate { RemoveStep(); };
@@ -342,9 +354,9 @@ namespace DialMenu
         static string TypeLabel(string type)
         {
             for (int i = 0; i < Types.Length; i++)
-                if (Types[i] == type) return TypeLabels[i];
-            if (type == "wait") return "Warten";
-            return string.IsNullOrEmpty(type) ? "Schritt" : type;
+                if (Types[i] == type) return Strings.Get(TypeKeys[i]);
+            if (type == "wait") return Strings.Get("macro.wait");
+            return string.IsNullOrEmpty(type) ? Strings.Get("macro.stepFallback") : type;
         }
 
         static string Detail(MacroStep step)
@@ -355,14 +367,14 @@ namespace DialMenu
             switch (step.Type)
             {
                 case "hotkey":
-                    return (value.Length == 0 ? "keine Kombination" : value) + pause;
+                    return (value.Length == 0 ? Strings.Get("macro.noCombination") : value) + pause;
                 case "text":
-                    return (value.Length == 0 ? "kein Text"
+                    return (value.Length == 0 ? Strings.Get("macro.noText")
                         : value.Length > 26 ? value.Substring(0, 26) + "…" : value) + pause;
                 case "delay":
-                    return "unterbricht" + pause;
+                    return Strings.Get("macro.interrupts") + pause;
                 case "program":
-                    return (value.Length == 0 ? "kein Programm" : Shorten(value, 30)) + pause;
+                    return (value.Length == 0 ? Strings.Get("macro.noProgram") : Shorten(value, 30)) + pause;
             }
             return value + pause;
         }
@@ -392,8 +404,8 @@ namespace DialMenu
                     _type.SelectedIndex = -1;
                     _value.Text = "";
                     _delay.Value = 0;
-                    _summary.Text = "Noch keine Schritte. Mit „Hinzufügen“ beginnt die Liste.";
-                    _valueCaption.Text = "Wert";
+                    _summary.Text = Strings.Get("macro.empty");
+                    _valueCaption.Text = Strings.Get("macro.value");
                     return;
                 }
 
@@ -409,23 +421,23 @@ namespace DialMenu
                 switch (step.Type)
                 {
                     case "hotkey":
-                        _valueCaption.Text = "Tastenkombination";
-                        _value.ToolTip = "Zum Beispiel Strg+Alt+M, Alt+F4 oder F11.";
+                        _valueCaption.Text = Strings.Get("macro.caption.hotkey");
+                        _value.ToolTip = Strings.Get("macro.tip.hotkey");
                         break;
                     case "text":
-                        _valueCaption.Text = "Text";
-                        _value.ToolTip = "Wird als Tastatureingabe an das aktive Fenster gesendet.";
+                        _valueCaption.Text = Strings.Get("macro.caption.text");
+                        _value.ToolTip = Strings.Get("macro.tip.text");
                         break;
                     case "delay":
-                        _valueCaption.Text = "Wert (nicht verwendet)";
-                        _value.ToolTip = "Eine Pause braucht nur die Dauer unten.";
+                        _valueCaption.Text = Strings.Get("macro.caption.delay");
+                        _value.ToolTip = Strings.Get("macro.tip.delay");
                         break;
                     case "program":
-                        _valueCaption.Text = "Programm oder Dokument";
-                        _value.ToolTip = "Vollständiger Pfad oder Name, z. B. notepad.exe.";
+                        _valueCaption.Text = Strings.Get("macro.caption.program");
+                        _value.ToolTip = Strings.Get("macro.tip.program");
                         break;
                     default:
-                        _valueCaption.Text = "Wert";
+                        _valueCaption.Text = Strings.Get("macro.value");
                         break;
                 }
             }
@@ -446,18 +458,17 @@ namespace DialMenu
             string what;
             switch (step.Type)
             {
-                case "hotkey": what = "sendet „" + Value(step) + "“"; break;
-                case "text": what = "tippt den Text „" + Value(step) + "“"; break;
-                case "delay": what = "wartet"; break;
-                case "program": what = "startet „" + Value(step) + "“"; break;
-                default: what = "führt „" + Value(step) + "“ aus"; break;
+                case "hotkey": what = Strings.Format("macro.send", Value(step)); break;
+                case "text": what = Strings.Format("macro.typesText", Value(step)); break;
+                case "delay": what = Strings.Get("macro.waits"); break;
+                case "program": what = Strings.Format("macro.starts", Value(step)); break;
+                default: what = Strings.Format("macro.runs", Value(step)); break;
             }
 
             if (step.DelayMs > 0)
-                _summary.Text = "Schritt " + (_index + 1) + " " + what + ", danach "
-                    + step.DelayMs + " ms Pause.";
+                _summary.Text = Strings.Format("macro.summaryWithPause", _index + 1, what, step.DelayMs);
             else
-                _summary.Text = "Schritt " + (_index + 1) + " " + what + ", ohne Pause.";
+                _summary.Text = Strings.Format("macro.summaryNoPause", _index + 1, what);
         }
 
         static string Value(MacroStep step)

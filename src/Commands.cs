@@ -888,7 +888,7 @@ namespace DialMenu
             List<string> errors = new List<string>();
             if (a == null)
             {
-                errors.Add("Aktion ist leer.");
+                errors.Add(Strings.Get("validate.empty"));
                 return errors;
             }
 
@@ -899,48 +899,45 @@ namespace DialMenu
             {
                 case "program":
                     if (target.Length == 0)
-                        errors.Add("Programm: Bitte einen Programmnamen oder Pfad angeben.");
+                        errors.Add(Strings.Get("validate.program"));
                     break;
 
                 case "url":
                     if (target.Length == 0)
-                        errors.Add("URL: Bitte ein Ziel angeben (z. B. https://example.com).");
+                        errors.Add(Strings.Get("validate.url"));
                     break;
 
                 case "shell":
                     if (target.Length == 0)
-                        errors.Add("Befehl: Bitte einen Shell-Befehl angeben.");
+                        errors.Add(Strings.Get("validate.shell"));
                     break;
 
                 case "hotkey":
                     if (target.Length == 0)
                     {
-                        errors.Add("Tastenkombination: Bitte eine Kombination angeben (z. B. Ctrl+Alt+M).");
+                        errors.Add(Strings.Get("validate.hotkey"));
                     }
                     else
                     {
                         List<ushort> mods;
                         ushort vk;
                         if (!TryParseHotkey(target, out mods, out vk))
-                            errors.Add("Tastenkombination \"" + target +
-                                "\" konnte nicht gelesen werden. Beispiel: Ctrl+Alt+M oder F11.");
+                            errors.Add(Strings.Format("validate.hotkeyInvalid", target));
                     }
                     break;
 
                 case "media":
                     if (target.Length == 0)
-                        errors.Add("Medien: Bitte eine Aktion waehlen (playpause, next, prev, stop).");
+                        errors.Add(Strings.Get("validate.mediaMissing"));
                     else if (CanonicalMedia(target).Length == 0)
-                        errors.Add("Medien: Unbekannte Aktion \"" + target +
-                            "\". Erlaubt: playpause, next, prev, stop.");
+                        errors.Add(Strings.Format("validate.mediaUnknown", target));
                     break;
 
                 case "volume":
                     if (target.Length == 0)
-                        errors.Add("Lautstaerke: Bitte up, down oder mute angeben.");
+                        errors.Add(Strings.Get("validate.volumeMissing"));
                     else if (CanonicalVolume(target).Length == 0)
-                        errors.Add("Lautstaerke: Unbekannte Richtung \"" + target +
-                            "\". Erlaubt: up, down, mute.");
+                        errors.Add(Strings.Format("validate.volumeUnknown", target));
                     else
                     {
                         string extra = Clean(a.Args);
@@ -948,26 +945,23 @@ namespace DialMenu
                         {
                             int n;
                             if (!int.TryParse(extra, out n))
-                                errors.Add("Lautstaerke: Die Schrittanzahl \"" + extra + "\" ist keine Zahl.");
+                                errors.Add(Strings.Format("validate.volumeNaN", extra));
                             else if (n < 1 || n > 50)
-                                errors.Add("Lautstaerke: Die Schrittanzahl muss zwischen 1 und 50 liegen.");
+                                errors.Add(Strings.Get("validate.volumeRange"));
                         }
                     }
                     break;
 
                 case "system":
                     if (target.Length == 0)
-                        errors.Add("System: Bitte einen Befehl angeben (z. B. lock, sleep, taskmgr).");
+                        errors.Add(Strings.Get("validate.systemMissing"));
                     else if (CanonicalSystem(target).Length == 0)
-                        errors.Add("System: Unbekannter Befehl \"" + target +
-                            "\". Erlaubt: lock, sleep, hibernate, showdesktop, taskmgr, shutdown, " +
-                            "restart, logoff, screenoff, alttab, taskview, virtualdesktop, snip, " +
-                            "emojis, clipboard, magnifier, explorer, startmenu.");
+                        errors.Add(Strings.Format("validate.systemUnknown", target));
                     break;
 
                 case "activate":
                     if (target.Length == 0)
-                        errors.Add("Fenster: Bitte einen Fenstertitel oder Prozessnamen angeben.");
+                        errors.Add(Strings.Get("validate.activate"));
                     break;
 
                 case "discord":
@@ -979,8 +973,7 @@ namespace DialMenu
                         if (s == target) { known = true; break; }
 
                     if (!known)
-                        errors.Add("Discord: Unbekannte Aktion \"" + target +
-                            "\". Erlaubt: toggle, mute, unmute, deafen, undeafen, toggledeafen.");
+                        errors.Add(Strings.Format("validate.discordUnknown", target));
 
                     string extra = Clean(a.Args);
                     if (extra.Length > 0)
@@ -988,8 +981,7 @@ namespace DialMenu
                         List<ushort> mods;
                         ushort vk;
                         if (!TryParseHotkey(extra, out mods, out vk))
-                            errors.Add("Discord: Die Tastenkombination \"" + extra +
-                                "\" konnte nicht gelesen werden. Beispiel: Ctrl+Shift+M.");
+                            errors.Add(Strings.Format("validate.discordHotkey", extra));
                     }
                     break;
                 }
@@ -997,7 +989,7 @@ namespace DialMenu
                 case "macro":
                     if (a.Steps == null || a.Steps.Count == 0)
                     {
-                        errors.Add("Makro: Das Makro enthaelt keine Schritte.");
+                        errors.Add(Strings.Get("validate.macroEmpty"));
                     }
                     else
                     {
@@ -1007,7 +999,7 @@ namespace DialMenu
                             int nr = i + 1;
                             if (s == null)
                             {
-                                errors.Add("Makro: Schritt " + nr + " ist leer.");
+                                errors.Add(Strings.Format("validate.stepEmpty", nr));
                                 continue;
                             }
 
@@ -1018,26 +1010,25 @@ namespace DialMenu
                             {
                                 if (val.Length == 0)
                                 {
-                                    errors.Add("Makro: Schritt " + nr + " (Tastenkombination) hat keine Taste.");
+                                    errors.Add(Strings.Format("validate.stepHotkeyMissing", nr));
                                 }
                                 else
                                 {
                                     List<ushort> m;
                                     ushort k;
                                     if (!TryParseHotkey(val, out m, out k))
-                                        errors.Add("Makro: Schritt " + nr +
-                                            " (Tastenkombination) ist ungueltig: \"" + val + "\".");
+                                        errors.Add(Strings.Format("validate.stepHotkeyInvalid", nr, val));
                                 }
                             }
                             else if (type == "text")
                             {
                                 if (val.Length == 0)
-                                    errors.Add("Makro: Schritt " + nr + " (Text) ist leer.");
+                                    errors.Add(Strings.Format("validate.stepTextEmpty", nr));
                             }
                             else if (type == "program")
                             {
                                 if (val.Length == 0)
-                                    errors.Add("Makro: Schritt " + nr + " (Programm) hat kein Ziel.");
+                                    errors.Add(Strings.Format("validate.stepProgramMissing", nr));
                             }
                             else if (type == "delay" || type == "wait")
                             {
@@ -1045,28 +1036,26 @@ namespace DialMenu
                                 {
                                     int n;
                                     if (!int.TryParse(val, out n) || n < 0)
-                                        errors.Add("Makro: Schritt " + nr +
-                                            " (Wartezeit) ist keine gueltige Millisekundenzahl.");
+                                        errors.Add(Strings.Format("validate.stepDelayInvalid", nr));
                                 }
                             }
                             else
                             {
-                                errors.Add("Makro: Schritt " + nr + " hat einen unbekannten Typ \"" +
-                                    s.Type + "\". Erlaubt: hotkey, text, delay, program, wait.");
+                                errors.Add(Strings.Format("validate.stepUnknownType", nr, s.Type));
                             }
 
                             if (s.DelayMs < 0)
-                                errors.Add("Makro: Schritt " + nr + " hat eine negative Verzoegerung.");
+                                errors.Add(Strings.Format("validate.stepNegativeDelay", nr));
                         }
                     }
                     break;
 
                 case "":
-                    errors.Add("Aktion: Die Art der Aktion fehlt.");
+                    errors.Add(Strings.Get("validate.kindMissing"));
                     break;
 
                 default:
-                    errors.Add("Aktion: Unbekannte Art \"" + a.Kind + "\".");
+                    errors.Add(Strings.Format("validate.kindUnknown", a.Kind));
                     break;
             }
 
@@ -1079,7 +1068,7 @@ namespace DialMenu
 
         public static string Describe(ActionItem a)
         {
-            if (a == null) return "Leere Aktion";
+            if (a == null) return Strings.Get("describe.emptyAction");
 
             string kind = Norm(a.Kind);
             string target = Clean(a.Target);
@@ -1087,45 +1076,62 @@ namespace DialMenu
             switch (kind)
             {
                 case "program":
-                    return target.Length > 0 ? "Programm: " + target : "Programm ohne Ziel";
+                    return target.Length > 0
+                        ? Strings.Format("describe.program", target)
+                        : Strings.Get("describe.programNone");
 
                 case "url":
-                    return target.Length > 0 ? "URL: " + target : "URL ohne Ziel";
+                    return target.Length > 0
+                        ? Strings.Format("describe.url", target)
+                        : Strings.Get("describe.urlNone");
 
                 case "shell":
-                    return target.Length > 0 ? "Befehl: " + target : "Befehl ohne Inhalt";
+                    return target.Length > 0
+                        ? Strings.Format("describe.shell", target)
+                        : Strings.Get("describe.shellNone");
 
                 case "hotkey":
-                    return target.Length > 0 ? "Tastenkombination: " + target : "Tastenkombination ohne Taste";
+                    return target.Length > 0
+                        ? Strings.Format("describe.hotkey", target)
+                        : Strings.Get("describe.hotkeyNone");
 
                 case "media":
                 {
                     string m = CanonicalMedia(target);
-                    if (m.Length == 0) return "Medien: " + (target.Length > 0 ? target : "unbekannt");
-                    return "Medien: " + MediaLabel(m);
+                    if (m.Length == 0)
+                        return Strings.Format("describe.media",
+                            target.Length > 0 ? target : Strings.Get("describe.unknown"));
+                    return Strings.Format("describe.media", MediaLabel(m));
                 }
 
                 case "volume":
                 {
                     string v = CanonicalVolume(target);
-                    if (v.Length == 0) return "Lautstaerke: " + (target.Length > 0 ? target : "unbekannt");
+                    if (v.Length == 0)
+                        return Strings.Format("describe.volume",
+                            target.Length > 0 ? target : Strings.Get("describe.unknown"));
                     int steps = 1;
                     int n;
                     if (!string.IsNullOrEmpty(a.Args) && int.TryParse(a.Args.Trim(), out n) && n > 0) steps = n;
-                    if (v == "mute") return "Lautstaerke: Stumm schalten";
-                    return "Lautstaerke: " + (v == "up" ? "lauter" : "leiser") +
-                        " (" + steps + (steps == 1 ? " Schritt)" : " Schritte)");
+                    if (v == "mute") return Strings.Get("describe.volumeMute");
+                    return Strings.Format("describe.volumeSteps",
+                        Strings.Get(v == "up" ? "describe.louder" : "describe.quieter"),
+                        steps, steps == 1 ? Strings.Get("describe.stepOne") : Strings.Get("describe.stepMany"));
                 }
 
                 case "system":
                 {
                     string s = CanonicalSystem(target);
-                    if (s.Length == 0) return "System: " + (target.Length > 0 ? target : "unbekannt");
-                    return "System: " + SystemLabel(s);
+                    if (s.Length == 0)
+                        return Strings.Format("describe.system",
+                            target.Length > 0 ? target : Strings.Get("describe.unknown"));
+                    return Strings.Format("describe.system", SystemLabel(s));
                 }
 
                 case "activate":
-                    return target.Length > 0 ? "Fenster aktivieren: " + target : "Fenster ohne Titel";
+                    return target.Length > 0
+                        ? Strings.Format("describe.activate", target)
+                        : Strings.Get("describe.activateNone");
 
                 case "discord":
                 {
@@ -1133,58 +1139,60 @@ namespace DialMenu
                     string note = extra.Length > 0 ? extra : Discord.DefaultMuteHotkey;
 
                     if (target == "toggle")
-                        return "Discord: Stummschalten umschalten (" + note + ")";
-                    if (target == "mute") return "Discord: Mikrofon stumm (systemweit)";
-                    if (target == "unmute") return "Discord: Mikrofon laut (systemweit)";
+                        return Strings.Format("describe.discordToggle", note);
+                    if (target == "mute") return Strings.Get("describe.discordMute");
+                    if (target == "unmute") return Strings.Get("describe.discordUnmute");
                     if (target == "deafen" || target == "undeafen" || target == "toggledeafen")
-                        return "Discord: Taubschalten umschalten (" + note + ")";
-                    return "Discord: " + (target.Length > 0 ? target : "unbekannt");
+                        return Strings.Format("describe.discordDeafen", note);
+                    return Strings.Format("describe.discord",
+                        target.Length > 0 ? target : Strings.Get("describe.unknown"));
                 }
 
                 case "macro":
                 {
                     int count = a.Steps == null ? 0 : a.Steps.Count;
-                    return "Makro (" + count + (count == 1 ? " Schritt)" : " Schritte)");
+                    return Strings.Format("describe.macro",
+                        count, count == 1 ? Strings.Get("describe.stepOne") : Strings.Get("describe.stepMany"));
                 }
 
                 case "":
-                    return "Aktion ohne Art";
+                    return Strings.Get("describe.noKind");
 
                 default:
-                    return "Unbekannt: " + a.Kind;
+                    return Strings.Format("describe.unknownKind", a.Kind);
             }
         }
 
         static string MediaLabel(string m)
         {
             if (m == "playpause") return "Play/Pause";
-            if (m == "next") return "Naechster Titel";
-            if (m == "prev") return "Vorheriger Titel";
-            return "Stop";
+            if (m == "next") return Strings.Get("media.next");
+            if (m == "prev") return Strings.Get("media.prev");
+            return Strings.Get("media.stop");
         }
 
         static string SystemLabel(string s)
         {
             switch (s)
             {
-                case "lock": return "Sperren";
-                case "sleep": return "Standby";
-                case "hibernate": return "Ruhezustand";
-                case "showdesktop": return "Desktop zeigen";
-                case "taskmgr": return "Task-Manager";
-                case "shutdown": return "Herunterfahren";
-                case "restart": return "Neustart";
-                case "logoff": return "Abmelden";
-                case "screenoff": return "Monitor aus";
-                case "alttab": return "Fenster wechseln";
-                case "taskview": return "Aufgabenansicht";
-                case "virtualdesktop": return "Naechster Desktop";
-                case "snip": return "Screenshot-Ausschnitt";
-                case "emojis": return "Emoji-Tafel";
-                case "clipboard": return "Zwischenablage";
-                case "magnifier": return "Bildschirmlupe";
-                case "explorer": return "Datei-Explorer";
-                case "startmenu": return "Startmenue";
+                case "lock": return Strings.Get("system.lock");
+                case "sleep": return Strings.Get("system.sleep");
+                case "hibernate": return Strings.Get("system.hibernate");
+                case "showdesktop": return Strings.Get("system.showdesktop");
+                case "taskmgr": return Strings.Get("system.taskmgr");
+                case "shutdown": return Strings.Get("system.shutdown");
+                case "restart": return Strings.Get("system.restart");
+                case "logoff": return Strings.Get("system.logoff");
+                case "screenoff": return Strings.Get("system.screenoff");
+                case "alttab": return Strings.Get("system.alttab");
+                case "taskview": return Strings.Get("system.taskview");
+                case "virtualdesktop": return Strings.Get("system.virtualdesktop");
+                case "snip": return Strings.Get("system.snip");
+                case "emojis": return Strings.Get("system.emojis");
+                case "clipboard": return Strings.Get("system.clipboard");
+                case "magnifier": return Strings.Get("system.magnifier");
+                case "explorer": return Strings.Get("system.explorer");
+                case "startmenu": return Strings.Get("system.startmenu");
             }
             return s;
         }

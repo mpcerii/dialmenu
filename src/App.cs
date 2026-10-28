@@ -27,6 +27,7 @@ namespace DialMenu
         SettingsWindow _settings;
         bool _exiting;
         bool _lastStartWithWindows;
+        string _trayLanguage;
 
         [STAThread]
         public static void Main(string[] args)
@@ -245,8 +246,16 @@ namespace DialMenu
                     Log.Write("Autostart: " + detail);
                 }
 
-                if (_tray != null)
-                    _tray.Text = _config.Enabled ? "DialMenu" : "DialMenu – pausiert";
+                // Ein Sprachwechsel aendert Text und Menue des Infobereichs.
+                if (!string.Equals(_trayLanguage, _config.Language, StringComparison.Ordinal))
+                {
+                    _trayLanguage = _config.Language;
+                    RefreshTray();
+                }
+                else if (_tray != null)
+                {
+                    _tray.Text = _config.Enabled ? Config.AppName : Strings.Get("app.trayPaused");
+                }
             }
             catch (Exception ex)
             {
@@ -292,8 +301,8 @@ namespace DialMenu
             catch (Exception ex)
             {
                 Log.Write("Einstellungen konnten nicht geöffnet werden: " + ex.Message);
-                MessageBox.Show("Die Einstellungen konnten nicht geöffnet werden.\r\n\r\n" + ex.Message,
-                    "DialMenu", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show(Strings.Get("app.settingsError") + "\r\n\r\n" + ex.Message,
+                    Config.AppName, MessageBoxButton.OK, MessageBoxImage.Warning);
             }
         }
 
@@ -310,37 +319,54 @@ namespace DialMenu
 
         void BuildTray()
         {
-            _tray = new NotifyIcon();
-            _tray.Icon = TrayIconFactory.Create();
-            _tray.Text = _config.Enabled ? "DialMenu" : "DialMenu – pausiert";
-            _tray.Visible = true;
-            _tray.DoubleClick += delegate { OpenSettings(); };
+            if (_tray == null)
+            {
+                _tray = new NotifyIcon();
+                _tray.Icon = TrayIconFactory.Create();
+                _tray.Visible = true;
+                _tray.DoubleClick += delegate { OpenSettings(); };
+            }
+
+            RefreshTray();
+        }
+
+        // Text und Menue des Infobereichs in der aktuellen Sprache. Wird auch
+        // nach einem Sprachwechsel gerufen, damit das Kontextmenue mitgeht.
+        void RefreshTray()
+        {
+            if (_tray == null) return;
+
+            _tray.Text = _config.Enabled ? Config.AppName : Strings.Get("app.trayPaused");
+            if (string.IsNullOrEmpty(_trayLanguage)) _trayLanguage = _config.Language;
 
             ContextMenuStrip menu = new ContextMenuStrip();
             menu.ShowImageMargin = false;
 
-            ToolStripMenuItem settings = new ToolStripMenuItem("Einstellungen");
+            ToolStripMenuItem settings = new ToolStripMenuItem(Strings.Get("app.traySettings"));
             settings.Font = new Font(settings.Font, System.Drawing.FontStyle.Bold);
             settings.Click += delegate { OpenSettings(); };
             menu.Items.Add(settings);
 
             menu.Items.Add(new ToolStripSeparator());
 
-            ToolStripMenuItem about = new ToolStripMenuItem("Über DialMenu");
-            about.Click += delegate { OpenSettings("Über"); };
+            ToolStripMenuItem about = new ToolStripMenuItem(Strings.Get("app.trayAbout"));
+            about.Click += delegate { OpenSettings("about"); };
             menu.Items.Add(about);
 
-            ToolStripMenuItem folder = new ToolStripMenuItem("Konfigurationsordner öffnen");
+            ToolStripMenuItem folder = new ToolStripMenuItem(Strings.Get("app.trayFolder"));
             folder.Click += delegate { OpenConfigFolder(); };
             menu.Items.Add(folder);
 
             menu.Items.Add(new ToolStripSeparator());
 
-            ToolStripMenuItem quit = new ToolStripMenuItem("Beenden");
+            ToolStripMenuItem quit = new ToolStripMenuItem(Strings.Get("app.trayQuit"));
             quit.Click += delegate { ExitApplication(); };
             menu.Items.Add(quit);
 
+            // Das alte Menue wird von NotifyIcon nicht entsorgt.
+            ContextMenuStrip old = _tray.ContextMenuStrip;
             _tray.ContextMenuStrip = menu;
+            if (old != null) old.Dispose();
         }
 
         void DisposeTray()
@@ -442,7 +468,7 @@ namespace DialMenu
             string exe = ExePath();
             if (string.IsNullOrEmpty(exe))
             {
-                detail = "Programmpfad konnte nicht ermittelt werden.";
+                detail = Strings.Get("autostart.noPath");
                 return false;
             }
 
@@ -452,7 +478,7 @@ namespace DialMenu
                 {
                     if (key == null)
                     {
-                        detail = "Der Autostart-Schlüssel ist nicht zugänglich.";
+                        detail = Strings.Get("autostart.noKey");
                         return false;
                     }
 
@@ -464,36 +490,36 @@ namespace DialMenu
                         string written = key.GetValue(ValueName, null) as string;
                         if (written == null)
                         {
-                            detail = "Der Eintrag wurde nicht übernommen.";
+                            detail = Strings.Get("autostart.notWritten");
                             return false;
                         }
                         if (!string.Equals(written, wanted, StringComparison.Ordinal))
                         {
-                            detail = "Der gespeicherte Eintrag weicht ab: " + written;
+                            detail = Strings.Format("autostart.mismatch", written);
                             return false;
                         }
                         if (!File.Exists(exe))
                         {
-                            detail = "Eingetragen, aber die Programmdatei fehlt.";
+                            detail = Strings.Get("autostart.fileMissing");
                             return false;
                         }
-                        detail = "Aktiv – Eintrag vorhanden";
+                        detail = Strings.Get("autostart.active");
                         return true;
                     }
 
                     key.DeleteValue(ValueName, false);
                     if (key.GetValue(ValueName, null) != null)
                     {
-                        detail = "Der Eintrag konnte nicht entfernt werden.";
+                        detail = Strings.Get("autostart.removeFailed");
                         return false;
                     }
-                    detail = "Inaktiv – kein Eintrag";
+                    detail = Strings.Get("autostart.inactive");
                     return true;
                 }
             }
             catch (Exception ex)
             {
-                detail = "Fehler: " + ex.Message;
+                detail = Strings.Format("autostart.error", ex.Message);
                 Log.Write("Autostart: " + ex.GetType().Name + ": " + ex.Message);
                 return false;
             }
@@ -504,13 +530,13 @@ namespace DialMenu
         {
             string value = ReadEntry();
             registered = !string.IsNullOrEmpty(value);
-            if (!registered) return "Inaktiv – kein Eintrag";
+            if (!registered) return Strings.Get("autostart.inactive");
 
             string wanted = CommandLine();
             if (string.Equals(value, wanted, StringComparison.OrdinalIgnoreCase))
-                return "Aktiv – Eintrag vorhanden";
+                return Strings.Get("autostart.active");
 
-            return "Eingetragen, aber abweichend: " + value;
+            return Strings.Format("autostart.differs", value);
         }
     }
 

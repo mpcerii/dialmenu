@@ -12,70 +12,76 @@ using System.Windows.Threading;
 
 namespace DialMenu
 {
-    // Radiales Overlay im Stil geschliffenen Rauchglases. Die Bildsprache ist
-    // unveraendert: Segmentglas, weisse Auswahl mit Glimmen, eingelassener
-    // Mittelkreis, strenge Monochromie. Neu ist die Platzierung: viele
-    // Randpositionen, mehrere Monitore und ein weiches Hineingleiten.
+    // Radiales Overlay als ruhiges Instrument: Glasflaechen auf einem
+    // geschliffenen Grundring, eine einzige Lichtkante, eingelassene Mitte.
+    //
+    // Saemtliche Farbe kommt aus RingThemes - hell und dunkel sind zwei
+    // Fassungen desselben Materials. Bewusst weggelassen sind Glanzfolien,
+    // Leuchtsaeume und doppelte Zierlinien; die Auswahl liest sich ueber
+    // eine duenne Kontur und eine Spur hellere Flaeche.
     public class OverlayWindow : Window
     {
-        // --- Farbwelt: nur Schwarz, Anthrazit, Grau, Weiss ---
-        static readonly Color IconDim = Color.FromRgb(0x7C, 0x83, 0x8D);
-        static readonly Color IconOn = Color.FromRgb(0xFF, 0xFF, 0xFF);
-        static readonly Color TextOn = Color.FromRgb(0xF4, 0xF6, 0xF9);
-        static readonly Color TextOff = Color.FromRgb(0x8E, 0x95, 0xA0);
-
-        static readonly Brush BaseRingFill = Freeze(new SolidColorBrush(Color.FromRgb(0x04, 0x05, 0x07)));
-        static readonly Brush IdleFill = Freeze(new LinearGradientBrush(
-            (Color)ColorConverter.ConvertFromString("#262B33"),
-            (Color)ColorConverter.ConvertFromString("#0A0C10"), 90));
-        static readonly Brush IdleStroke = Freeze(new LinearGradientBrush(
-            (Color)ColorConverter.ConvertFromString("#4E555F"),
-            (Color)ColorConverter.ConvertFromString("#14171C"), 90));
-        static readonly Brush ActiveFill = Freeze(new LinearGradientBrush(
-            (Color)ColorConverter.ConvertFromString("#3E4550"),
-            (Color)ColorConverter.ConvertFromString("#1B1F26"), 90));
-        static readonly Brush CenterFill = Freeze(new RadialGradientBrush(
-            (Color)ColorConverter.ConvertFromString("#15181D"),
-            (Color)ColorConverter.ConvertFromString("#05060A")));
-        static readonly Brush CenterRim = Freeze(new LinearGradientBrush(
-            (Color)ColorConverter.ConvertFromString("#5A616C"),
-            (Color)ColorConverter.ConvertFromString("#161A20"), 90));
-        static readonly Brush CenterSheen = Freeze(new LinearGradientBrush(
-            Color.FromArgb(0x1E, 0xFF, 0xFF, 0xFF), Color.FromArgb(0x00, 0xFF, 0xFF, 0xFF), 90));
-
-        // Lichtreflex: heller oben, auslaufend nach unten.
-        static readonly Brush GlossSheen = Freeze(new LinearGradientBrush(
-            Color.FromArgb(0x30, 0xFF, 0xFF, 0xFF),
-            Color.FromArgb(0x00, 0xFF, 0xFF, 0xFF), 90));
-
-        static Brush Freeze(Brush b) { b.Freeze(); return b; }
+        // --- Grundraster, vor der Skalierung ---------------------------
+        const double BaseRadiusIn = 74;
+        const double BaseBreadth = 48;
+        const double BaseCorner = 4.0;
+        const double BaseGap = 3.4;
 
         // Randabstand zur Arbeitsflaeche in Geraeteeinheiten.
         const double EdgeMargin = 20;
-        // Hineingleiten beim Erscheinen.
-        const double SlideDistance = 12;
-        const double FadeMs = 130;
 
+        // Bewegung: nur Deckkraft, ruhig und kurz.
+        const double FadeMs = 130;
+        const double SelectionMs = 130;
+
+        // Eine Strichstaerke fuer Symbole, eine fuer Segmentkanten.
+        const double IconStroke = 1.7;
+        const double SegmentStroke = 1.0;
+        static readonly FontFamily DisplayFont =
+            new FontFamily("Segoe UI Variable Display, Segoe UI");
+        static readonly FontFamily TextFont =
+            new FontFamily("Segoe UI Variable Text, Segoe UI");
+
+        // --- Zustand ---------------------------------------------------
         readonly DispatcherTimer _hideTimer;
 
         Config _config;
         Canvas _canvas;
         Grid _center;
         Path _centerIcon;
-        SolidColorBrush _centerIconStroke;
+        SolidColorBrush _centerIconBrush;
         TextBlock _centerName;
         TextBlock _counter;
-        TranslateTransform _slide;
 
         readonly List<Path> _active = new List<Path>();
-        readonly List<Path> _icons = new List<Path>();
         readonly List<SolidColorBrush> _iconBrushes = new List<SolidColorBrush>();
+        readonly List<SolidColorBrush> _labelBrushes = new List<SolidColorBrush>();
+
+        // --- Material, bei jedem Aufbau aus dem Thema erneuert ---------
+        RingTheme _theme;
+        Brush _fillIdle;
+        Brush _strokeIdle;
+        Brush _fillActive;
+        Brush _strokeActive;
+        Brush _ground;
+        Brush _rim;
+        Brush _centerFill;
+        Brush _centerRim;
+        Color _iconIdle;
+        Color _labelIdle;
+        Color _iconActive;
+        Brush _text;
+        Brush _textMuted;
+        Color _shadowColor;
+        double _shadowOpacity;
 
         int _index;
         bool _visible;
         bool _hiding;
+        bool _light;
 
         double _cx, _cy, _rIn, _rOut, _rMid, _centerR;
+        double _scale = 1.0;
         double _iconSize = 19;
 
         public event Action<ActionItem> Executed;
@@ -93,13 +99,16 @@ namespace DialMenu
             ResizeMode = ResizeMode.NoResize;
             ShowActivated = false;
             Focusable = false;
+            IsHitTestVisible = false;
             SizeToContent = SizeToContent.Manual;
             Visibility = Visibility.Hidden;
             Left = -10000;
             Top = -10000;
 
-            _slide = new TranslateTransform(0, 0);
-            RenderTransform = _slide;
+            // Kanten glatt zeichnen, Text in der Anzeige-Aufloesung setzen.
+            TextOptions.SetTextFormattingMode(this, TextFormattingMode.Display);
+            TextOptions.SetTextRenderingMode(this, TextRenderingMode.Grayscale);
+            RenderOptions.SetEdgeMode(this, EdgeMode.Unspecified);
 
             BuildShell();
 
@@ -148,33 +157,33 @@ namespace DialMenu
         // Masse
         // ------------------------------------------------------------------
 
-        // Segmentbreite im Grundraster, vor der Skalierung.
-        const double HalfBreadth = 24;
-        const double BaseRadiusIn = 74;
-
         void Measure()
         {
-            double rIn = BaseRadiusIn;
-            double rOut = rIn + HalfBreadth * 2;
             double scale = _config.Scale <= 0 ? 1.0 : _config.Scale;
 
             // Passt der Ring nicht in die Arbeitsflaeche, wird er verkleinert,
             // statt ueber den Rand zu laufen.
             if (_fitScale > 0 && _fitScale < 1.0) scale *= _fitScale;
+            _scale = scale;
 
-            _rIn = rIn * scale;
-            _rOut = rOut * scale;
+            _rIn = BaseRadiusIn * scale;
+            _rOut = _rIn + BaseBreadth * scale;
             _rMid = (_rIn + _rOut) / 2;
-            _centerR = (_rIn - 5) * 1.0;
-            _iconSize = Math.Max(14, HalfBreadth * 0.82 * scale);
 
-            // Der Aussenring traegt einen weichen Schatten mit 44er Weichzeichnung
-            // und 10 Versatz, das Auswahlsegment ein weisses Glimmen ueber 34. Der
-            // Rand muss beide fassen, damit nichts am Fensterrand abgeschnitten
-            // wird - deshalb eine feste Untergrenze unabhaengig von der Skalierung.
-            double pad = Math.Max(24 * scale, 34);
+            // Die Mitte liegt mit gleichmaessigem Rand innerhalb des Ringes.
+            double inset = Math.Max(6.0, 9.0 * scale);
+            _centerR = _rIn - inset;
 
-            double size = 2 * (_rOut + pad);
+            _iconSize = Math.Max(14.0, BaseBreadth * 0.50 * scale);
+
+            // Der weiche Schatten unter dem Grundring braucht Platz, damit
+            // nichts am Fensterrand abgeschnitten wird.
+            double pad = ShadowPadding(scale);
+
+            // Gerade Kantenzahl: der Mittelpunkt faellt dann auf ein ganzes
+            // Pixel und die aeussere Lichtkante kann exakt auf Pixelgrenzen
+            // gelegt werden.
+            double size = Math.Round((_rOut + pad) / 2.0) * 4.0;
 
             _cx = size / 2;
             _cy = size / 2;
@@ -185,6 +194,98 @@ namespace DialMenu
             Height = size;
         }
 
+        static double ShadowPadding(double scale)
+        {
+            return Math.Max(22.0, 26.0 * scale);
+        }
+
+        // ------------------------------------------------------------------
+        // Material
+        // ------------------------------------------------------------------
+
+        static bool ResolveLight(string appearance)
+        {
+            string a = appearance == null ? "" : appearance.Trim().ToLowerInvariant();
+            if (a == "light" || a == "hell") return true;
+            if (a == "dark" || a == "dunkel") return false;
+
+            try
+            {
+                using (Microsoft.Win32.RegistryKey key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(
+                    "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize", false))
+                {
+                    object value = key == null ? null : key.GetValue("AppsUseLightTheme", 0);
+                    if (value is int) return (int)value != 0;
+                }
+            }
+            catch { }
+
+            return false;
+        }
+
+        // Baut alle Pinsel neu. Wird bei jedem Aufbau aufgerufen, damit ein
+        // Wechsel von Thema oder Helligkeit sofort greift.
+        void BuildMaterial()
+        {
+            _light = ResolveLight(_config.Appearance);
+            _theme = RingThemes.Get(_config.RingTheme, _light);
+
+            _fillIdle = Vertical(_theme.IdleTop, _theme.IdleBottom);
+            _strokeIdle = Vertical(_theme.IdleStrokeTop, _theme.IdleStrokeBottom);
+            _fillActive = Vertical(_theme.ActiveTop, _theme.ActiveBottom);
+            _strokeActive = Solid(_theme.ActiveStroke);
+            _ground = Solid(_theme.Ground);
+            _rim = Solid(_theme.RimOuter);
+
+            RadialGradientBrush center = new RadialGradientBrush();
+            center.GradientStops.Add(new GradientStop(_theme.CenterInner, 0.0));
+            center.GradientStops.Add(new GradientStop(_theme.CenterOuter, 1.0));
+            center.Freeze();
+            _centerFill = center;
+
+            _centerRim = Vertical(_theme.CenterRimTop, _theme.CenterRimBottom);
+
+            // Beschriftungen liegen eine Stufe ueber der gedaempften Schrift:
+            // bei 9 Pixeln braucht die Kontur mehr Deckkraft als ein Hinweis.
+            _labelIdle = Mix(_theme.TextMuted, _theme.Text, 0.45);
+
+            _iconIdle = _theme.IconIdle;
+            _iconActive = _theme.IconActive;
+            _text = Solid(_theme.Text);
+            _textMuted = Solid(_theme.TextMuted);
+
+            // Im Dunkeln ein weicher Schatten aus dem Grundton, im Hellen
+            // der im Thema hinterlegte weiche Schatten. In beiden Faellen
+            // kommt die Farbe aus dem Thema, nicht aus einer Konstanten.
+            _shadowColor = _light ? _theme.GlowColor : _theme.Ground;
+            _shadowOpacity = _light ? _theme.GlowOpacity : 0.62;
+        }
+
+        // Lineare Mischung zweier Themenfarben; a endet bei t=0, b bei t=1.
+        static Color Mix(Color a, Color b, double t)
+        {
+            t = Math.Max(0.0, Math.Min(1.0, t));
+            return Color.FromArgb(
+                (byte)Math.Round(a.A + (b.A - a.A) * t),
+                (byte)Math.Round(a.R + (b.R - a.R) * t),
+                (byte)Math.Round(a.G + (b.G - a.G) * t),
+                (byte)Math.Round(a.B + (b.B - a.B) * t));
+        }
+
+        static Brush Solid(Color c)
+        {
+            SolidColorBrush b = new SolidColorBrush(c);
+            b.Freeze();
+            return b;
+        }
+
+        static Brush Vertical(Color top, Color bottom)
+        {
+            LinearGradientBrush b = new LinearGradientBrush(top, bottom, 90);
+            b.Freeze();
+            return b;
+        }
+
         // ------------------------------------------------------------------
         // Zeichnen
         // ------------------------------------------------------------------
@@ -192,11 +293,16 @@ namespace DialMenu
         void Rebuild()
         {
             Measure();
+            BuildMaterial();
 
             _canvas.Children.Clear();
             _active.Clear();
-            _icons.Clear();
             _iconBrushes.Clear();
+            _labelBrushes.Clear();
+            _center = null;
+            _centerName = null;
+            _counter = null;
+            _centerIcon = null;
 
             List<ActionItem> items = Items;
             int n = items.Count;
@@ -207,42 +313,19 @@ namespace DialMenu
             else if (_index >= n) _index = n - 1;
             else if (_index < 0) _index = 0;
 
-            // Weicher, metallischer Grundring: gibt dem Ganzen Halt und sorgt fuer
-            // die tiefschwarzen Fugen zwischen den Segmenten.
-            Path baseRing = new Path();
-            baseRing.Data = Donut(_cx, _cy, _rIn - 3, _rOut + 3);
-            baseRing.Fill = BaseRingFill;
-            baseRing.Effect = new DropShadowEffect
-            {
-                Color = Colors.Black,
-                BlurRadius = 44,
-                ShadowDepth = 10,
-                Direction = 270,
-                Opacity = 0.68
-            };
-            _canvas.Children.Add(baseRing);
-
-            // Feine silberne Aussenkontur als Lichtreflex.
-            Path rim = new Path();
-            rim.Data = Ring(_cx, _cy, _rOut + 1.6);
-            rim.Stroke = new SolidColorBrush(Color.FromArgb(0x55, 0xC9, 0xD2, 0xE0));
-            rim.StrokeThickness = 0.9;
-            _canvas.Children.Add(rim);
-
-            Path rimInner = new Path();
-            rimInner.Data = Ring(_cx, _cy, _rIn - 1.4);
-            rimInner.Stroke = new SolidColorBrush(Color.FromArgb(0x3A, 0xC9, 0xD2, 0xE0));
-            rimInner.StrokeThickness = 0.8;
-            _canvas.Children.Add(rimInner);
+            BuildGround();
 
             if (n == 0)
             {
-                BuildCenter(0);
+                BuildCenter();
+                UpdateSelection(false);
                 return;
             }
 
             double step = 360.0 / n;
-            double gapDeg = Math.Min(step * 0.26, (3.0 / (_rMid * Math.PI / 180.0)));
+            double gapPx = Math.Max(2.0, BaseGap * _scale);
+            double gapDeg = Math.Min(step * 0.30,
+                Math.Asin(Math.Min(0.9, gapPx / (2.0 * _rOut))) * 2.0 * 180.0 / Math.PI);
 
             for (int i = 0; i < n; i++)
             {
@@ -251,67 +334,199 @@ namespace DialMenu
 
                 Geometry geo = n == 1
                     ? Donut(_cx, _cy, _rIn, _rOut)
-                    : RoundedSector(_cx, _cy, _rIn, _rOut, a0, a1, 4.2);
+                    : RoundedSector(_cx, _cy, _rIn, _rOut, a0, a1, BaseCorner * _scale);
 
-                // Glasflaeche
                 Path idle = new Path();
                 idle.Data = geo;
-                idle.Fill = IdleFill;
-                idle.Stroke = IdleStroke;
-                idle.StrokeThickness = 1;
+                idle.Fill = _fillIdle;
+                idle.Stroke = _strokeIdle;
+                idle.StrokeThickness = SegmentStroke;
+                idle.StrokeLineJoin = PenLineJoin.Round;
+                idle.IsHitTestVisible = false;
                 _canvas.Children.Add(idle);
 
-                // Aufliegende Lichtreflexion im oberen Bereich
-                Path gloss = new Path();
-                gloss.Data = geo;
-                gloss.Fill = GlossSheen;
-                gloss.IsHitTestVisible = false;
-                _canvas.Children.Add(gloss);
-
-                // Auswahlzustand liegt als eigene Ebene darueber und blendet ein.
+                // Auswahl liegt als eigene Ebene darueber und blendet ein.
                 Path act = new Path();
                 act.Data = geo;
-                act.Fill = ActiveFill;
-                act.Stroke = Brushes.White;
-                act.StrokeThickness = 1.5;
+                act.Fill = _fillActive;
+                act.Stroke = _strokeActive;
+                act.StrokeThickness = SegmentStroke;
+                act.StrokeLineJoin = PenLineJoin.Round;
                 act.Opacity = 0;
                 act.IsHitTestVisible = false;
-                act.Effect = new DropShadowEffect
-                {
-                    Color = Colors.White,
-                    BlurRadius = 34,
-                    ShadowDepth = 0,
-                    Opacity = 0.75
-                };
                 _canvas.Children.Add(act);
                 _active.Add(act);
 
-                AddIcon(items[i], -90 + (i + 0.5) * step);
+                AddSegmentContent(items[i], -90 + (i + 0.5) * step, step);
             }
 
-            BuildCenter(_index);
+            BuildCenter();
+            UpdateSelection(false);
         }
 
-        void AddIcon(ActionItem item, double angleDeg)
+        void BuildGround()
+        {
+            double edge = Math.Max(1.5, 2.0 * _scale);
+
+            // Der Grund reicht bis unter die Mitte. Damit ist der schmale
+            // Kanal zwischen Mittelkreis und Segmenten gefuellt und nicht
+            // durchsichtig.
+            double inner = Math.Max(0, _centerR - 2 * _scale);
+
+            Path ground = new Path();
+            ground.Data = Donut(_cx, _cy, inner, _rOut + edge);
+            ground.Fill = _ground;
+            ground.IsHitTestVisible = false;
+            ground.Effect = new DropShadowEffect
+            {
+                Color = _shadowColor,
+                BlurRadius = Math.Max(18.0, 30.0 * _scale),
+                ShadowDepth = Math.Max(3.0, 6.0 * _scale),
+                Direction = 270,
+                Opacity = _shadowOpacity
+            };
+            _canvas.Children.Add(ground);
+
+            // Eine einzige, saubere Lichtkante aussen. Auf ganze Pixel
+            // gelegt, damit sie auch bei 100 Prozent scharf bleibt.
+            // Radius auf n + 0.5: bei 1 Pixel Strichstaerke liegen dann beide
+            // Kanten des Kreises genau auf Pixelgrenzen.
+            double rimRadius = Math.Floor(_rOut + edge) + 0.5;
+
+            Path rim = new Path();
+            rim.Data = Ring(_cx, _cy, rimRadius);
+            rim.Stroke = _rim;
+            rim.StrokeThickness = 1.0;
+            rim.IsHitTestVisible = false;
+            _canvas.Children.Add(rim);
+        }
+        // Symbol und ggf. Beschriftung eines Segments. Mit Beschriftung liegt
+        // beides in einem Container, der exakt auf die Segmentflaeche
+        // beschnitten ist - ein Label kann also nie ueber seinen Ausschnitt
+        // laufen. Ohne Beschriftung bleibt es beim blanken Symbol.
+        void AddSegmentContent(ActionItem item, double angleDeg, double stepDeg)
         {
             double rad = angleDeg * Math.PI / 180.0;
-            double px = _cx + _rMid * Math.Cos(rad);
-            double py = _cy + _rMid * Math.Sin(rad);
+            double breadth = _rOut - _rIn;
+            bool labels = _config.ShowLabels;
 
-            SolidColorBrush brush = new SolidColorBrush(IconDim);
-            Path icon = MakeIcon(IconLibrary.For(item), brush, 1.8);
+            double iconSize = labels ? breadth * 0.36 : _iconSize;
+            iconSize = Math.Max(12.0, iconSize);
+
+            double iconR = labels ? _rMid - breadth * 0.20 : _rMid;
+            double px = _cx + iconR * Math.Cos(rad);
+            double py = _cy + iconR * Math.Sin(rad);
+
+            SolidColorBrush brush = new SolidColorBrush(_iconIdle);
+            Path icon = MakeIcon(IconLibrary.For(item), brush, IconStroke);
             _iconBrushes.Add(brush);
 
-            Viewbox vb = new Viewbox();
-            vb.Width = _iconSize;
-            vb.Height = _iconSize;
-            vb.Child = icon;
+            // Feste 24er-Bezugsflaeche um das Symbol: dadurch skalieren ein
+            // rundes und ein breites Zeichen gleich, statt sich der Pfadbreite
+            // anzupassen. Das haelt das optische Gewicht konstant.
+            Viewbox iconBox = new Viewbox();
+            iconBox.Width = iconSize;
+            iconBox.Height = iconSize;
+            iconBox.Stretch = Stretch.Uniform;
+            iconBox.Child = WrapOnGrid(icon, 24, 24);
+            iconBox.IsHitTestVisible = false;
 
-            Canvas.SetLeft(vb, px - _iconSize / 2);
-            Canvas.SetTop(vb, py - _iconSize / 2);
-            _canvas.Children.Add(vb);
+            if (!labels)
+            {
+                Canvas.SetLeft(iconBox, px - iconSize / 2);
+                Canvas.SetTop(iconBox, py - iconSize / 2);
+                _canvas.Children.Add(iconBox);
+                return;
+            }
 
-            _icons.Add(icon);
+            // Mit Beschriftung: Symbol ueber Text, beides mittig auf der
+            // Kreisbahn.
+            //
+            // Bei mehr als sechs Segmenten ist der Bogen an der Innenkante
+            // schmaler als ein deutsches Wort: "Einstellungen" braucht rund
+            // 78 px, das Segment bietet bei acht Eintraegen aber nur etwa
+            // 58. Der Text wuerde also zwangslaeufig abgeschnitten. Deshalb
+            // zeigt nur ein Ring mit wenigen Segmenten Beschriftungen -
+            // dort, wo sie wirklich hineinpassen.
+            int segments = Math.Max(1, (int)Math.Round(360.0 / stepDeg));
+            if (segments > 6)
+            {
+                // Zu eng: nur Symbol, aber etwas groesser als ohne Labelwunsch.
+                double wide = Math.Max(_iconSize, breadth * 0.46);
+                iconBox.Width = wide;
+                iconBox.Height = wide;
+                Canvas.SetLeft(iconBox, px - wide / 2);
+                Canvas.SetTop(iconBox, py - wide / 2);
+                _canvas.Children.Add(iconBox);
+                return;
+            }
+
+            // Bis sechs Segmente ist der Bogen breit genug. Die nutzbare
+            // Breite ist an der Innenkante am groessten.
+            double arcInner = 2 * Math.PI * _rIn / segments;
+            double groupWidth = Math.Min(arcInner * 0.92, breadth * 1.10);
+
+            double labelSize = Math.Max(9.5, breadth * 0.20);
+            double smallIcon = Math.Min(breadth * 0.36, groupWidth * 0.44);
+            iconBox.Width = smallIcon;
+            iconBox.Height = smallIcon;
+            iconBox.HorizontalAlignment = HorizontalAlignment.Center;
+
+            double lx = _cx + _rMid * Math.Cos(rad);
+            double ly = _cy + _rMid * Math.Sin(rad);
+
+            Grid host = new Grid();
+            host.Width = _canvas.Width;
+            host.Height = _canvas.Height;
+            host.IsHitTestVisible = false;
+
+            // Bei nur einem Eintrag umschliesst das Segment den ganzen Ring;
+            // dann ist der Beschnitt schlicht der Ring selbst.
+            if (stepDeg >= 359.0)
+            {
+                host.Clip = Donut(_cx, _cy, _rIn + 1, _rOut - 1);
+            }
+            else
+            {
+                double halfStep = stepDeg / 2;
+                host.Clip = RoundedSector(_cx, _cy, _rIn + 1, _rOut - 1,
+                    angleDeg - halfStep, angleDeg + halfStep, BaseCorner * _scale);
+            }
+
+            StackPanel stack = new StackPanel();
+            stack.HorizontalAlignment = HorizontalAlignment.Center;
+            stack.VerticalAlignment = VerticalAlignment.Center;
+            stack.Width = groupWidth;
+            stack.RenderTransform = new TranslateTransform(lx - _cx, ly - _cy);
+            stack.Children.Add(iconBox);
+
+            TextBlock label = new TextBlock();
+            label.FontFamily = TextFont;
+            label.FontSize = labelSize;
+            label.FontWeight = FontWeights.Medium;
+            label.TextAlignment = TextAlignment.Center;
+            label.TextWrapping = TextWrapping.NoWrap;
+            label.TextTrimming = TextTrimming.CharacterEllipsis;
+            label.Foreground = new SolidColorBrush(_labelIdle);
+            label.Margin = new Thickness(0, Math.Max(1.0, labelSize * 0.22), 0, 0);
+            label.Text = item == null || item.Label == null ? "" : item.Label;
+            label.IsHitTestVisible = false;
+            _labelBrushes.Add((SolidColorBrush)label.Foreground);
+            stack.Children.Add(label);
+
+            host.Children.Add(stack);
+            _canvas.Children.Add(host);
+        }
+
+        // Legt ein Zeichen auf ein festes Raster, damit der Viewbox immer
+        // dieselbe Bezugsflaeche sieht.
+        static Canvas WrapOnGrid(UIElement child, double w, double h)
+        {
+            Canvas c = new Canvas();
+            c.Width = w;
+            c.Height = h;
+            c.Children.Add(child);
+            return c;
         }
 
         static Path MakeIcon(string data, Brush stroke, double thickness)
@@ -324,10 +539,15 @@ namespace DialMenu
             p.StrokeStartLineCap = PenLineCap.Round;
             p.StrokeEndLineCap = PenLineCap.Round;
             p.Fill = Brushes.Transparent;
+            p.IsHitTestVisible = false;
             return p;
         }
 
-        void BuildCenter(int index)
+        // ------------------------------------------------------------------
+        // Mitte
+        // ------------------------------------------------------------------
+
+        void BuildCenter()
         {
             if (_center != null)
             {
@@ -339,66 +559,63 @@ namespace DialMenu
             }
 
             double d = _centerR * 2;
+            double rim = 1.0;
 
             Grid host = new Grid();
             host.Width = d;
             host.Height = d;
+            host.IsHitTestVisible = false;
 
+            // Eingelassene Flaeche: ein Radialverlauf, eine Kante. Kein
+            // zusaetzlicher Schein, keine zweite Zierlinie.
             Ellipse body = new Ellipse();
-            body.Fill = CenterFill;
+            body.Fill = _centerFill;
             host.Children.Add(body);
 
-            // Glasiges Oberflaechenlicht
-            Ellipse sheen = new Ellipse();
-            sheen.Fill = CenterSheen;
-            host.Children.Add(sheen);
-
-            Ellipse rim = new Ellipse();
-            rim.Stroke = CenterRim;
-            rim.StrokeThickness = 1.2;
-            host.Children.Add(rim);
-
-            Ellipse inner = new Ellipse();
-            inner.Margin = new Thickness(6);
-            inner.Stroke = new SolidColorBrush(Color.FromArgb(0x2E, 0x00, 0x00, 0x00));
-            inner.StrokeThickness = 3;
-            host.Children.Add(inner);
+            Ellipse edge = new Ellipse();
+            edge.Stroke = _centerRim;
+            edge.StrokeThickness = rim;
+            edge.Margin = new Thickness(rim / 2);
+            host.Children.Add(edge);
 
             StackPanel content = new StackPanel();
             content.VerticalAlignment = VerticalAlignment.Center;
             content.HorizontalAlignment = HorizontalAlignment.Center;
-            content.Margin = new Thickness(14, 0, 14, 0);
+            content.Margin = new Thickness(_centerR * 0.22, 0, _centerR * 0.22, 0);
 
-            _centerIconStroke = new SolidColorBrush(IconOn);
-            // Ohne Auswahl zeigt die Mitte das neutrale Zahnrad, genau wie zuvor.
-            _centerIcon = MakeIcon(IconLibrary.Resolve("gear"), _centerIconStroke, 1.55);
+            _centerIconBrush = new SolidColorBrush(_theme.IconActive);
+            _centerIcon = MakeIcon(IconLibrary.Resolve("gear"), _centerIconBrush, IconStroke);
 
+            double iconWidth = Math.Max(20.0, _centerR * 0.86);
             Viewbox iconBox = new Viewbox();
-            iconBox.Width = Math.Max(22, _centerR * 0.52);
-            iconBox.Height = Math.Max(22, _centerR * 0.52);
-            iconBox.Child = _centerIcon;
+            iconBox.Width = Math.Min(iconWidth, _centerR * 0.52);
+            iconBox.Height = iconBox.Width;
+            iconBox.Stretch = Stretch.Uniform;
+            iconBox.Child = WrapOnGrid(_centerIcon, 24, 24);
             iconBox.HorizontalAlignment = HorizontalAlignment.Center;
-            iconBox.Margin = new Thickness(0, 0, 0, 2);
             content.Children.Add(iconBox);
 
             _centerName = new TextBlock();
-            _centerName.FontFamily = new FontFamily("Segoe UI Variable Display, Segoe UI");
-            _centerName.FontSize = Math.Max(12, _centerR * 0.215);
+            _centerName.FontFamily = DisplayFont;
+            _centerName.FontSize = Math.Max(11.0, _centerR * 0.205);
             _centerName.FontWeight = FontWeights.SemiBold;
-            _centerName.Foreground = new SolidColorBrush(TextOn);
+            _centerName.Foreground = _text;
             _centerName.TextAlignment = TextAlignment.Center;
             _centerName.TextWrapping = TextWrapping.Wrap;
+            _centerName.TextTrimming = TextTrimming.CharacterEllipsis;
             _centerName.MaxWidth = _centerR * 1.62;
-            _centerName.LineHeight = _centerName.FontSize * 1.25;
-            _centerName.Margin = new Thickness(0, _centerR * 0.11, 0, 0);
+            _centerName.LineHeight = _centerName.FontSize * 1.28;
+            _centerName.LineStackingStrategy = LineStackingStrategy.BlockLineHeight;
+            _centerName.MaxHeight = _centerName.LineHeight * 2.02;
+            _centerName.Margin = new Thickness(0, _centerR * 0.09, 0, 0);
             content.Children.Add(_centerName);
 
             _counter = new TextBlock();
-            _counter.FontFamily = new FontFamily("Segoe UI Variable Text, Segoe UI");
-            _counter.FontSize = Math.Max(9, _centerR * 0.135);
-            _counter.Foreground = new SolidColorBrush(TextOff);
+            _counter.FontFamily = TextFont;
+            _counter.FontSize = Math.Max(8.5, _centerR * 0.125);
+            _counter.Foreground = _textMuted;
             _counter.TextAlignment = TextAlignment.Center;
-            _counter.Margin = new Thickness(0, _centerR * 0.09, 0, 0);
+            _counter.Margin = new Thickness(0, _centerR * 0.07, 0, 0);
             content.Children.Add(_counter);
 
             host.Children.Add(content);
@@ -407,8 +624,6 @@ namespace DialMenu
             Canvas.SetTop(host, _cy - d / 2);
             _canvas.Children.Add(host);
             _center = host;
-
-            UpdateSelection(false);
         }
 
         // ------------------------------------------------------------------
@@ -447,13 +662,13 @@ namespace DialMenu
             return g;
         }
 
-        // Kreisausschnitt mit abgerundeten Ecken.
+        // Kreisausschnitt mit abgerundeten Ecken, gleicher Radius an allen vier.
         static Geometry RoundedSector(double cx, double cy, double rIn, double rOut,
                                       double a0, double a1, double cr)
         {
             double sweep = a1 - a0;
             double maxRadial = (rOut - rIn) / 2.0;
-            double maxArc = (rOut * Math.Abs(sweep) * Math.PI / 180.0) / 2.0;
+            double maxArc = (rIn * Math.Abs(sweep) * Math.PI / 180.0) / 2.0;
             cr = Math.Max(0, Math.Min(cr, Math.Min(maxRadial, maxArc) * 0.92));
 
             Point A = Polar(cx, cy, rOut, a0);
@@ -464,14 +679,14 @@ namespace DialMenu
             Vector t0 = Tangent(a0), t1 = Tangent(a1);
             Vector rad0 = Radial(a0), rad1 = Radial(a1);
 
-            Point A1 = A - rad0 * cr;   // Ende der Linie von D
-            Point A2 = A + t0 * cr;     // Start des Aussenbogens
-            Point B1 = B - t1 * cr;     // Ende des Aussenbogens
-            Point B2 = B - rad1 * cr;   // Start der Linie nach C
-            Point C1 = C + rad1 * cr;   // Ende der Linie von B
-            Point C2 = C - t1 * cr;     // Start des Innenbogens
-            Point D1 = D + t0 * cr;     // Ende des Innenbogens
-            Point D2 = D + rad0 * cr;   // Start der Linie nach A
+            Point A1 = A - rad0 * cr;
+            Point A2 = A + t0 * cr;
+            Point B1 = B - t1 * cr;
+            Point B2 = B - rad1 * cr;
+            Point C1 = C + rad1 * cr;
+            Point C2 = C - t1 * cr;
+            Point D1 = D + t0 * cr;
+            Point D2 = D + rad0 * cr;
 
             bool large = Math.Abs(sweep) > 180;
 
@@ -492,28 +707,39 @@ namespace DialMenu
             g.Freeze();
             return g;
         }
-
         // ------------------------------------------------------------------
         // Auswahl
         // ------------------------------------------------------------------
 
+        // Kurzes Ueberblenden, kein Federn, keine Groessenaenderung.
         void UpdateSelection(bool animate)
         {
             List<ActionItem> items = Items;
+            Color labelOn = _theme == null ? Colors.White : _theme.Text;
+            Color labelOff = _theme == null ? Colors.Gray : _labelIdle;
 
             for (int i = 0; i < _active.Count; i++)
             {
                 bool sel = i == _index;
                 double target = sel ? 1.0 : 0.0;
+                Duration d = new Duration(TimeSpan.FromMilliseconds(SelectionMs));
 
                 if (animate)
                 {
-                    _active[i].BeginAnimation(OpacityProperty,
-                        new DoubleAnimation(target, TimeSpan.FromMilliseconds(150)));
+                    DoubleAnimation fade = new DoubleAnimation(target, d);
+                    fade.EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut };
+                    _active[i].BeginAnimation(OpacityProperty, fade);
 
                     if (i < _iconBrushes.Count)
-                        _iconBrushes[i].BeginAnimation(SolidColorBrush.ColorProperty,
-                            new ColorAnimation(sel ? IconOn : IconDim, TimeSpan.FromMilliseconds(150)));
+                    {
+                        ColorAnimation c = new ColorAnimation(sel ? _iconActive : _iconIdle, d);
+                        _iconBrushes[i].BeginAnimation(SolidColorBrush.ColorProperty, c);
+                    }
+                    if (i < _labelBrushes.Count)
+                    {
+                        ColorAnimation c = new ColorAnimation(sel ? labelOn : labelOff, d);
+                        _labelBrushes[i].BeginAnimation(SolidColorBrush.ColorProperty, c);
+                    }
                 }
                 else
                 {
@@ -523,7 +749,12 @@ namespace DialMenu
                     if (i < _iconBrushes.Count)
                     {
                         _iconBrushes[i].BeginAnimation(SolidColorBrush.ColorProperty, null);
-                        _iconBrushes[i].Color = sel ? IconOn : IconDim;
+                        _iconBrushes[i].Color = sel ? _iconActive : _iconIdle;
+                    }
+                    if (i < _labelBrushes.Count)
+                    {
+                        _labelBrushes[i].BeginAnimation(SolidColorBrush.ColorProperty, null);
+                        _labelBrushes[i].Color = sel ? labelOn : labelOff;
                     }
                 }
             }
@@ -533,7 +764,7 @@ namespace DialMenu
             if (_index >= 0 && _index < items.Count)
             {
                 ActionItem item = items[_index];
-                _centerName.Text = item.Label;
+                _centerName.Text = item.Label == null ? "" : item.Label;
                 if (_centerIcon != null) _centerIcon.Data = Geometry.Parse(IconLibrary.For(item));
                 _counter.Text = string.Format(CultureInfo.InvariantCulture,
                     "{0:00} / {1:00}", _index + 1, items.Count);
@@ -568,49 +799,15 @@ namespace DialMenu
             _hiding = false;
             Visibility = Visibility.Visible;
 
-            // Immer vollstaendig neu zeichnen: Groesse und Position stecken in
-            // jeder Koordinate, ein blosses Umrechnen wuerde den Kreis versetzen.
+            // Immer vollstaendig neu zeichnen: Groesse, Farben und Position
+            // stecken in jeder Koordinate, ein blosses Umrechnen wuerde den
+            // Kreis versetzen.
             ResolvePlacement();
             Rebuild();
+            PositionWindow();
 
-            double dx, dy;
-            PositionWindow(out dx, out dy);
-
-            UpdateSelection(false);
-            AnimateIn(dx, dy);
-        }
-
-        // Fade und kleiner Versatz aus der naechsten Kante heraus. Liegt das
-        // Overlay mittig, entfaellt der Versatz.
-        void AnimateIn(double dx, double dy)
-        {
-            _slide.BeginAnimation(TranslateTransform.XProperty, null);
-            _slide.BeginAnimation(TranslateTransform.YProperty, null);
-
-            if (dx == 0 && dy == 0)
-            {
-                _slide.X = 0;
-                _slide.Y = 0;
-            }
-            else
-            {
-                _slide.X = dx;
-                _slide.Y = dy;
-
-                CubicEase ease = new CubicEase();
-                ease.EasingMode = EasingMode.EaseOut;
-                Duration d = new Duration(TimeSpan.FromMilliseconds(FadeMs));
-
-                DoubleAnimation sx = new DoubleAnimation(0, d);
-                sx.EasingFunction = ease;
-                DoubleAnimation sy = new DoubleAnimation(0, d);
-                sy.EasingFunction = ease;
-
-                _slide.BeginAnimation(TranslateTransform.XProperty, sx);
-                _slide.BeginAnimation(TranslateTransform.YProperty, sy);
-            }
-
-            DoubleAnimation fade = new DoubleAnimation(0, 1, new Duration(TimeSpan.FromMilliseconds(FadeMs)));
+            DoubleAnimation fade = new DoubleAnimation(0, 1,
+                new Duration(TimeSpan.FromMilliseconds(FadeMs)));
             fade.EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut };
             BeginAnimation(OpacityProperty, fade);
         }
@@ -623,7 +820,8 @@ namespace DialMenu
             _visible = false;
             _hiding = true;
 
-            DoubleAnimation fade = new DoubleAnimation(Opacity, 0, TimeSpan.FromMilliseconds(FadeMs));
+            DoubleAnimation fade = new DoubleAnimation(Opacity, 0,
+                TimeSpan.FromMilliseconds(FadeMs));
             fade.Completed += delegate
             {
                 if (_visible) return;
@@ -720,7 +918,6 @@ namespace DialMenu
             if (Executed != null) Executed(item);
             Commands.Execute(item);
         }
-
         // ------------------------------------------------------------------
         // Platzierung
         // ------------------------------------------------------------------
@@ -765,8 +962,7 @@ namespace DialMenu
             // Kreis samt Schatten muss vollstaendig in die Arbeitsflaeche passen.
             double usable = Math.Min(_area.Width, _area.Height) - 2 * EdgeMargin;
             double scaleValue = _config.Scale <= 0 ? 1.0 : _config.Scale;
-            double naturalPad = Math.Max(24 * scaleValue, 34);
-            double natural = 2 * ((BaseRadiusIn + HalfBreadth * 2) * scaleValue + naturalPad);
+            double natural = 2 * ((BaseRadiusIn + BaseBreadth) * scaleValue + ShadowPadding(scaleValue));
 
             if (usable > 40 && natural > usable)
                 _fitScale = usable / natural;
@@ -982,18 +1178,10 @@ namespace DialMenu
         [System.Runtime.InteropServices.DllImport("shcore.dll")]
         static extern int GetDpiForMonitor(IntPtr hmon, int dpiType, out uint dpiX, out uint dpiY);
 
-        // Setzt Fensterlage und die Richtung, aus der eingeglitten wird.
+        // Setzt die Fensterlage. Der Kreis steht still; eingeblendet wird
+        // ausschliesslich ueber die Deckkraft.
         void PositionWindow()
         {
-            double dx, dy;
-            PositionWindow(out dx, out dy);
-        }
-
-        void PositionWindow(out double slideDx, out double slideDy)
-        {
-            slideDx = 0;
-            slideDy = 0;
-
             if (_area.IsEmpty) ResolvePlacement();
             if (_area.IsEmpty) return;
 
@@ -1036,17 +1224,6 @@ namespace DialMenu
 
             Left = left;
             Top = top;
-
-            // Einblendrichtung aus der tatsaechlichen Endlage: nur wenn das
-            // Fenster am Rand sitzt, gleitet es von dort herein. Mittig bleibt es
-            // ruhig und blendet lediglich auf.
-            const double atEdge = 0.5;
-
-            if (left <= _area.Left + EdgeMargin + atEdge) slideDx = -SlideDistance;
-            else if (left >= _area.Right - w - EdgeMargin - atEdge) slideDx = SlideDistance;
-
-            if (top <= _area.Top + EdgeMargin + atEdge) slideDy = -SlideDistance;
-            else if (top >= _area.Bottom - h - EdgeMargin - atEdge) slideDy = SlideDistance;
         }
 
         protected override void OnSourceInitialized(EventArgs e)
@@ -1054,7 +1231,9 @@ namespace DialMenu
             base.OnSourceInitialized(e);
             IntPtr handle = new WindowInteropHelper(this).Handle;
             int style = UnsafeNativeMethods.GetWindowLong(handle, UnsafeNativeMethods.GWL_EXSTYLE);
-            style |= UnsafeNativeMethods.WS_EX_NOACTIVATE | UnsafeNativeMethods.WS_EX_TOOLWINDOW;
+            style |= UnsafeNativeMethods.WS_EX_NOACTIVATE
+                   | UnsafeNativeMethods.WS_EX_TOOLWINDOW
+                   | UnsafeNativeMethods.WS_EX_TRANSPARENT;
             UnsafeNativeMethods.SetWindowLong(handle, UnsafeNativeMethods.GWL_EXSTYLE, style);
         }
 
@@ -1063,6 +1242,7 @@ namespace DialMenu
             public const int GWL_EXSTYLE = -20;
             public const int WS_EX_NOACTIVATE = 0x08000000;
             public const int WS_EX_TOOLWINDOW = 0x00000080;
+            public const int WS_EX_TRANSPARENT = 0x00000020;
 
             [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "GetWindowLongW")]
             public static extern int GetWindowLong(IntPtr hWnd, int index);

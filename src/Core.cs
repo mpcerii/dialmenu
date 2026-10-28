@@ -92,6 +92,15 @@ namespace DialMenu
         [DataMember] public double Scale = 1.0;
         [DataMember] public bool ShowLabels = false;
 
+        // Sprache der Oberflaeche: "de" oder "en".
+        [DataMember] public string Language = "";
+
+        // "auto" folgt Windows, sonst "dark" oder "light".
+        [DataMember] public string Appearance = "auto";
+
+        // Ringthema, siehe RingThemes.
+        [DataMember] public string RingTheme = "graphite";
+
         [DataMember] public List<DeviceBinding> Devices = new List<DeviceBinding>();
         [DataMember] public List<Profile> Profiles = new List<Profile>();
         [DataMember] public string ActiveProfileId = "";
@@ -231,8 +240,13 @@ namespace DialMenu
             if (Scale < 0.6) Scale = 0.6;
             if (Scale > 2.2) Scale = 2.2;
             if (string.IsNullOrEmpty(Position)) Position = "unten rechts";
+            if (string.IsNullOrEmpty(Language)) Language = Strings.Detect();
+            if (string.IsNullOrEmpty(Appearance)) Appearance = "auto";
+            if (string.IsNullOrEmpty(RingTheme)) RingTheme = "graphite";
             if (string.IsNullOrEmpty(ActiveProfileId) && Profiles.Count > 0)
                 ActiveProfileId = Profiles[0].Id;
+
+            Strings.Current = Language;
         }
 
         public void Save()

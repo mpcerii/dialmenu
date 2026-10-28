@@ -109,6 +109,11 @@ namespace DialMenu
         bool _editorLoading;
         int _kindIndex = -1;
 
+        // Ringvorschau rechts neben dem Editor
+        Canvas _previewCanvas;
+        Border _previewWell;
+        TextBlock _previewCount;
+
         // Geraete
         List<DeviceRow> _discovered;
         string _discoverError;
@@ -120,6 +125,12 @@ namespace DialMenu
         // Darstellung
         Slider _scaleSlider;
         TextBlock _scaleValue;
+
+        // Darstellung: Helligkeit und Ringthema
+        Border[] _modeChips;
+        Border[] _themeTiles;
+        ContentControl[] _themeSwatchHosts;
+        TextBlock[] _themeNames;
 
         // Verhalten
         TextBlock _autostartState;
@@ -133,7 +144,7 @@ namespace DialMenu
             _config = config;
             _app = app;
 
-            Title = "DialMenu – Einstellungen";
+            Title = Strings.Get("app.windowTitle");
             Width = 1120;
             Height = 760;
             MinWidth = 960;
@@ -156,11 +167,87 @@ namespace DialMenu
             };
 
             BuildUi();
+            LocalizeSeededDefaults();
             ShowSection("befehle");
+        }
+
+        // Die Beispielbefehle und das erste Profil legt Core.cs mit deutschen
+        // Namen an. Beim Start und nach jedem Sprachwechsel werden genau diese
+        // Vorgaben in die aktuelle Sprache uebernommen; selbst vergebene Namen
+        // bleiben unangetastet.
+        void LocalizeSeededDefaults()
+        {
+            foreach (Profile profile in _config.Profiles)
+            {
+                if (profile == null) continue;
+
+                if (!string.IsNullOrEmpty(profile.Name)
+                    && (Strings.IsTranslated("profiles.defaultName", profile.Name)
+                        || string.Equals(profile.Name, "Hauptprofil", StringComparison.Ordinal)))
+                {
+                    profile.Name = Strings.Get("profiles.defaultName");
+                }
+
+                if (profile.Actions == null) continue;
+                foreach (ActionItem item in profile.Actions)
+                {
+                    if (item == null || string.IsNullOrEmpty(item.Label)) continue;
+                    string key = SeededLabelKey(item);
+                    if (key != null) item.Label = Strings.Get(key);
+                }
+            }
+        }
+
+        // Die von CreateDefault() angelegten Befehle, jeweils mit Art und Ziel.
+        // Nur wenn beides uebereinstimmt, gilt die Bezeichnung als Vorgabe und
+        // wird uebersetzt - ein selbst benannter Befehl bleibt unangetastet.
+        static readonly string[][] SeededCommands =
+        {
+            new string[] { "Browser", "url", "https://www.google.com" },
+            new string[] { "Explorer", "program", "explorer.exe" },
+            new string[] { "Terminal", "program", "wt.exe" },
+            new string[] { "Rechner", "program", "calc.exe" },
+            new string[] { "Einstellungen", "url", "ms-settings:" },
+            new string[] { "Task-Manager", "system", "taskmgr" },
+            new string[] { "Play / Pause", "media", "playpause" },
+            new string[] { "Lauter", "volume", "up" },
+            new string[] { "Leiser", "volume", "down" },
+            new string[] { "Desktop zeigen", "system", "showdesktop" },
+            new string[] { "Sperren", "system", "lock" }
+        };
+
+        static string SeededLabelKey(ActionItem item)
+        {
+            for (int i = 0; i < SeededCommands.Length; i++)
+            {
+                string[] seeded = SeededCommands[i];
+                if (!string.Equals(item.Kind, seeded[1], StringComparison.Ordinal)) continue;
+                if (!string.Equals(item.Target, seeded[2], StringComparison.Ordinal)) continue;
+
+                // Der deutsche Name steht nicht in der Tabelle (er ist der
+                // Schluessel selbst), deshalb beides pruefen.
+                string key = "presets.label." + seeded[0];
+                if (!Strings.Has(key)) continue;
+                if (string.Equals(item.Label, seeded[0], StringComparison.Ordinal)
+                    || Strings.IsTranslated(key, item.Label))
+                {
+                    return key;
+                }
+            }
+            return null;
         }
 
         void BuildUi()
         {
+            Title = Strings.Get("app.windowTitle");
+
+            // Beim Sprachwechsel laeuft der Aufbau erneut; der Seitenhost
+            // haengt dann noch am alten Baum und muss zuerst geloest werden.
+            Panel oldParent = LogicalTreeHelper.GetParent(_pageHost) as Panel;
+            if (oldParent != null) oldParent.Children.Remove(_pageHost);
+
+            _nav.Clear();
+
             Grid root = new Grid();
             root.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(212) });
             root.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -222,7 +309,7 @@ namespace DialMenu
             StackPanel foot = new StackPanel();
             foot.Margin = new Thickness(0, 0, 0, 16);
 
-            Button preview = Ui.Button("Im Overlay ansehen");
+            Button preview = Ui.Button(Strings.Get("app.preview"));
             preview.HorizontalAlignment = HorizontalAlignment.Stretch;
             preview.HorizontalContentAlignment = HorizontalAlignment.Center;
             preview.Margin = new Thickness(12, 0, 12, 10);
@@ -230,7 +317,7 @@ namespace DialMenu
             foot.Children.Add(preview);
 
             TextBlock note = new TextBlock();
-            note.Text = "Schließen legt das Fenster in den Infobereich.";
+            note.Text = Strings.Get("app.closeNote");
             note.FontSize = 10.5;
             note.Foreground = Ui.InkMuted;
             note.TextWrapping = TextWrapping.Wrap;
@@ -245,12 +332,12 @@ namespace DialMenu
             nav.Margin = new Thickness(10, 0, 10, 0);
             nav.VerticalAlignment = VerticalAlignment.Top;
 
-            AddNav(nav, "befehle", "Befehle", GlyphList);
-            AddNav(nav, "profile", "Profile", GlyphProfile);
-            AddNav(nav, "geraete", "Geräte", GlyphDial);
-            AddNav(nav, "darstellung", "Darstellung", IconLibrary.Desktop);
-            AddNav(nav, "verhalten", "Verhalten", IconLibrary.Gear);
-            AddNav(nav, "ueber", "Über", GlyphInfo);
+            AddNav(nav, "befehle", Strings.Get("nav.commands"), GlyphList);
+            AddNav(nav, "profile", Strings.Get("nav.profiles"), GlyphProfile);
+            AddNav(nav, "geraete", Strings.Get("nav.devices"), GlyphDial);
+            AddNav(nav, "darstellung", Strings.Get("nav.appearance"), IconLibrary.Desktop);
+            AddNav(nav, "verhalten", Strings.Get("nav.behavior"), IconLibrary.Gear);
+            AddNav(nav, "ueber", Strings.Get("nav.about"), GlyphInfo);
 
             panel.Children.Add(nav);
             side.Child = panel;
@@ -382,13 +469,13 @@ namespace DialMenu
         FrameworkElement BuildErrorPage(string key, Exception ex)
         {
             StackPanel body = PageBody();
-            body.Children.Add(PageHeader("Diese Seite ließ sich nicht aufbauen", null, null));
+            body.Children.Add(PageHeader(Strings.Get("error.pageTitle"), null, null));
 
             Border card = CardBox();
             StackPanel inner = new StackPanel();
             inner.Margin = new Thickness(18, 16, 18, 18);
 
-            TextBlock head = Ui.Text("Fehler beim Aufbau von „" + key + "“", 13, Ui.Ink);
+            TextBlock head = Ui.Text(Strings.Format("error.pageHead", key), 13, Ui.Ink);
             head.FontWeight = FontWeights.SemiBold;
             inner.Children.Add(head);
 
@@ -397,9 +484,7 @@ namespace DialMenu
             message.Margin = new Thickness(0, 6, 0, 0);
             inner.Children.Add(message);
 
-            TextBlock hint = Ui.Text(
-                "Der Fehler steht im Protokoll. Über „Über“ lässt es sich öffnen.",
-                11.5, Ui.InkMuted);
+            TextBlock hint = Ui.Text(Strings.Get("error.hint"), 11.5, Ui.InkMuted);
             hint.TextWrapping = TextWrapping.Wrap;
             hint.Margin = new Thickness(0, 10, 0, 0);
             inner.Children.Add(hint);
@@ -669,18 +754,10 @@ namespace DialMenu
             "volume", "system", "activate", "discord", "macro"
         };
 
-        static readonly string[] KindLabels =
+        static readonly string[] KindKeys =
         {
-            "Programm starten",
-            "Webseite oder Ordner öffnen",
-            "Befehl ausführen",
-            "Tastenkombination senden",
-            "Mediensteuerung",
-            "Lautstärke",
-            "Systemfunktion",
-            "Fenster in den Vordergrund",
-            "Discord",
-            "Makro"
+            "kind.program", "kind.url", "kind.shell", "kind.hotkey", "kind.media",
+            "kind.volume", "kind.system", "kind.activate", "kind.discord", "kind.macro"
         };
 
         FrameworkElement BuildCommandsPage()
@@ -689,7 +766,7 @@ namespace DialMenu
             if (_profile == null)
             {
                 _profile = new Profile();
-                _profile.Name = "Hauptprofil";
+                _profile.Name = Strings.Get("profiles.defaultName");
                 _config.Profiles.Add(_profile);
                 _config.ActiveProfileId = _profile.Id;
             }
@@ -709,9 +786,8 @@ namespace DialMenu
             headGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
             StackPanel titles = new StackPanel();
-            titles.Children.Add(Ui.Heading("Befehle", 19));
-            TextBlock sub = Ui.Text(
-                "Die Reihenfolge links entspricht der Drehrichtung am Regler.", 12.5, Ui.InkMuted);
+            titles.Children.Add(Ui.Heading(Strings.Get("commands.title"), 19));
+            TextBlock sub = Ui.Text(Strings.Get("commands.subtitle"), 12.5, Ui.InkMuted);
             sub.Margin = new Thickness(0, 3, 0, 0);
             titles.Children.Add(sub);
             headGrid.Children.Add(titles);
@@ -721,7 +797,7 @@ namespace DialMenu
             profileBox.Margin = new Thickness(16, 0, 0, 0);
             profileBox.MinWidth = 190;
 
-            TextBlock profileCaption = Ui.Text("Profil", 11, Ui.InkMuted);
+            TextBlock profileCaption = Ui.Text(Strings.Get("commands.profile"), 11, Ui.InkMuted);
             profileCaption.Margin = new Thickness(0, 0, 0, 4);
             profileBox.Children.Add(profileCaption);
 
@@ -756,20 +832,25 @@ namespace DialMenu
             Grid.SetRow(head, 0);
             page.Children.Add(head);
 
-            // --- Inhalt: Liste und Editor ---
+            // --- Inhalt: Liste, Editor und Ringvorschau ---
+            // Drei Spalten: Liste, Editor, Vorschau. Die Vorschau hat eine
+            // feste Breite, der Editor bekommt den Rest - bei 1120 px
+            // Fensterbreite bleiben ihm 348 px, genug fuer alle Felder.
             Grid body = new Grid();
-            body.Margin = new Thickness(30, 0, 30, 26);
+            body.Margin = new Thickness(24, 0, 24, 26);
             body.MaxWidth = 1000;
             body.HorizontalAlignment = HorizontalAlignment.Stretch;
-            body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(300) });
-            body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(20) });
+            body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(220) });
+            body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(12) });
             body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(12) });
+            body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(PreviewColumnWidth) });
             Grid.SetRow(body, 1);
             page.Children.Add(body);
 
             body.Children.Add(BuildActionListPane());
 
-            // Editor rechts
+            // Editor in der Mitte
             Grid editorFrame = new Grid();
             _editorHost = new StackPanel();
 
@@ -781,6 +862,25 @@ namespace DialMenu
 
             Grid.SetColumn(editorFrame, 2);
             body.Children.Add(editorFrame);
+
+            // Ringvorschau rechts - zeigt denselben Ring wie das Overlay.
+            FrameworkElement previewPane = BuildRingPreviewPane();
+            Grid.SetColumn(previewPane, 4);
+            body.Children.Add(previewPane);
+
+            // In schmalen Fenstern weicht die Vorschau, damit der Editor
+            // seine 320 px behaelt. Unter 820 px ist fuer beides kein Platz.
+            body.SizeChanged += delegate
+            {
+                // Beim ersten Layout steht die Breite noch auf 0. Dann bleibt
+                // die Vorschau stehen, statt kurz zu verschwinden.
+                if (body.ActualWidth <= 0) return;
+                bool show = body.ActualWidth >= PreviewMinBodyWidth;
+                body.ColumnDefinitions[3].Width = new GridLength(show ? 12 : 0);
+                body.ColumnDefinitions[4].Width =
+                    new GridLength(show ? PreviewColumnWidth : 0);
+                previewPane.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+            };
 
             RefreshActionList();
             if (_profile.Actions.Count > 0) SelectAction(0);
@@ -800,7 +900,7 @@ namespace DialMenu
             listHead.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             listHead.Margin = new Thickness(0, 0, 0, 8);
 
-            TextBlock caption = Ui.Text("Im Menü", 11.5, Ui.InkSoft);
+            TextBlock caption = Ui.Text(Strings.Get("commands.inMenu"), 11.5, Ui.InkSoft);
             caption.VerticalAlignment = VerticalAlignment.Center;
             listHead.Children.Add(caption);
 
@@ -812,25 +912,40 @@ namespace DialMenu
             DockPanel.SetDock(listHead, Dock.Top);
             pane.Children.Add(listHead);
 
-            // Werkzeuge unten
+            // Werkzeuge unten. In der schmalen Spalte stehen sie in zwei
+            // Zeilen: der Hauptknopf über die volle Breite, darunter die
+            // beiden kleinen Knöpfe nebeneinander.
             StackPanel order = new StackPanel();
-            order.Orientation = Orientation.Horizontal;
             order.Margin = new Thickness(0, 8, 0, 0);
             DockPanel.SetDock(order, Dock.Bottom);
 
-            Button add = Ui.PrimaryButton("Befehl hinzufügen");
+            Button add = Ui.PrimaryButton(Strings.Get("commands.add"));
+            add.HorizontalAlignment = HorizontalAlignment.Stretch;
+            add.HorizontalContentAlignment = HorizontalAlignment.Center;
             add.Click += delegate { AddCommand(); };
             order.Children.Add(add);
 
-            Button duplicate = Ui.SmallButton("Duplizieren");
-            duplicate.Margin = new Thickness(6, 0, 0, 0);
-            duplicate.Click += delegate { DuplicateCommand(); };
-            order.Children.Add(duplicate);
+            Grid smallRow = new Grid();
+            smallRow.Margin = new Thickness(0, 6, 0, 0);
+            smallRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            smallRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(6) });
+            smallRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
-            Button remove = Ui.SmallButton("Entfernen");
+            Button duplicate = Ui.SmallButton(Strings.Get("commands.duplicate"));
+            duplicate.HorizontalAlignment = HorizontalAlignment.Stretch;
+            duplicate.HorizontalContentAlignment = HorizontalAlignment.Center;
+            duplicate.Click += delegate { DuplicateCommand(); };
+            smallRow.Children.Add(duplicate);
+
+            Button remove = Ui.SmallButton(Strings.Get("commands.remove"));
+            remove.HorizontalAlignment = HorizontalAlignment.Stretch;
+            remove.HorizontalContentAlignment = HorizontalAlignment.Center;
             remove.Margin = new Thickness(6, 0, 0, 0);
             remove.Click += delegate { DeleteCommand(); };
-            order.Children.Add(remove);
+            Grid.SetColumn(remove, 2);
+            smallRow.Children.Add(remove);
+
+            order.Children.Add(smallRow);
 
             pane.Children.Add(order);
 
@@ -840,16 +955,16 @@ namespace DialMenu
             sortRow.Margin = new Thickness(0, 0, 0, 0);
             DockPanel.SetDock(sortRow, Dock.Bottom);
 
-            Button up = Ui.IconButton("↑", "Nach oben");
+            Button up = Ui.IconButton("↑", Strings.Get("commands.up"));
             up.Click += delegate { MoveCommand(-1); };
             sortRow.Children.Add(up);
 
-            TextBlock orderCaption = Ui.Text("Reihenfolge", 11, Ui.InkMuted);
+            TextBlock orderCaption = Ui.Text(Strings.Get("commands.order"), 11, Ui.InkMuted);
             orderCaption.VerticalAlignment = VerticalAlignment.Center;
             orderCaption.Margin = new Thickness(8, 0, 8, 0);
             sortRow.Children.Add(orderCaption);
 
-            Button down = Ui.IconButton("↓", "Nach unten");
+            Button down = Ui.IconButton("↓", Strings.Get("commands.down"));
             down.Click += delegate { MoveCommand(1); };
             sortRow.Children.Add(down);
 
@@ -905,11 +1020,19 @@ namespace DialMenu
                 if (_actionCount != null)
                 {
                     int count = _profile.Actions.Count;
-                    _actionCount.Text = count == 0 ? "leer"
-                        : count == 1 ? "1 Befehl" : count + " Befehle";
+                    _actionCount.Text = count == 0 ? Strings.Get("commands.countEmpty")
+                        : count == 1 ? Strings.Get("commands.countOne")
+                        : Strings.Format("commands.countMany", count);
                 }
             }
-            finally { _loading = false; }
+            finally
+            {
+                _loading = false;
+                // Jede Änderung an der Liste - Anlegen, Löschen, Sortieren,
+                // Umbenennen - läuft hier durch. Die Vorschau hängt deshalb
+                // an genau dieser Stelle.
+                RefreshRingPreview();
+            }
         }
 
         FrameworkElement BuildActionRow(ActionItem item, int index)
@@ -927,7 +1050,8 @@ namespace DialMenu
             StackPanel text = new StackPanel();
             text.Margin = new Thickness(2, 0, 0, 0);
 
-            TextBlock label = Ui.Text(string.IsNullOrEmpty(item.Label) ? "Ohne Namen" : item.Label, 12.5, Ui.Ink);
+            TextBlock label = Ui.Text(string.IsNullOrEmpty(item.Label)
+                ? Strings.Get("commands.unnamed") : item.Label, 12.5, Ui.Ink);
             label.TextTrimming = TextTrimming.CharacterEllipsis;
             text.Children.Add(label);
 
@@ -974,8 +1098,8 @@ namespace DialMenu
         static string KindLabel(string kind)
         {
             for (int i = 0; i < Kinds.Length; i++)
-                if (Kinds[i] == kind) return KindLabels[i];
-            return string.IsNullOrEmpty(kind) ? "Befehl" : kind;
+                if (Kinds[i] == kind) return Strings.Get(KindKeys[i]);
+            return string.IsNullOrEmpty(kind) ? Strings.Get("commands.command") : kind;
         }
 
         static int KindIndex(string kind)
@@ -1020,7 +1144,7 @@ namespace DialMenu
                 top.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
                 StackPanel nameBlock = new StackPanel();
-                nameBlock.Children.Add(Ui.Heading("Befehl bearbeiten", 13));
+                nameBlock.Children.Add(Ui.Heading(Strings.Get("commands.edit"), 13));
 
                 TextBlock kindText = Ui.Text(KindLabel(item.Kind), 11.5, Ui.InkMuted);
                 kindText.Margin = new Thickness(0, 2, 0, 0);
@@ -1039,12 +1163,12 @@ namespace DialMenu
                     item.Label = _fLabel.Text;
                     AfterEdit(item, true);
                 };
-                StackPanel labelBlock = FieldBlock("Bezeichnung im Menü", _fLabel, 16);
+                StackPanel labelBlock = FieldBlock(Strings.Get("commands.name"), _fLabel, 16);
                 stack.Children.Add(labelBlock);
 
                 _cKind = new SelectControl();
                 List<string> kindOptions = new List<string>();
-                for (int i = 0; i < KindLabels.Length; i++) kindOptions.Add(KindLabels[i]);
+                for (int i = 0; i < KindKeys.Length; i++) kindOptions.Add(Strings.Get(KindKeys[i]));
                 _cKind.SetItems(kindOptions);
                 _kindIndex = KindIndex(item.Kind);
                 _cKind.SelectedIndex = _kindIndex;
@@ -1058,7 +1182,7 @@ namespace DialMenu
                     UpdateKindBlocks(item);
                     AfterEdit(item, true);
                 };
-                stack.Children.Add(FieldBlock("Art", _cKind, 14));
+                stack.Children.Add(FieldBlock(Strings.Get("commands.kind"), _cKind, 14));
 
                 _fTarget = Ui.TextField();
                 _fTarget.Text = item.Target ?? "";
@@ -1068,7 +1192,7 @@ namespace DialMenu
                     item.Target = _fTarget.Text;
                     AfterEdit(item, false);
                 };
-                stack.Children.Add(FieldBlock("Ziel", _fTarget, 14));
+                stack.Children.Add(FieldBlock(Strings.Get("commands.target"), _fTarget, 14));
 
                 _targetHint = Ui.Text("", 11, Ui.InkMuted);
                 _targetHint.TextWrapping = TextWrapping.Wrap;
@@ -1079,11 +1203,11 @@ namespace DialMenu
                 _browseBlock.Orientation = Orientation.Horizontal;
                 _browseBlock.Margin = new Thickness(0, 8, 0, 0);
 
-                Button browseFile = Ui.SmallButton("Datei wählen…");
+                Button browseFile = Ui.SmallButton(Strings.Get("common.choose"));
                 browseFile.Click += delegate { BrowseFile(item); };
                 _browseBlock.Children.Add(browseFile);
 
-                Button browseFolder = Ui.SmallButton("Ordner wählen…");
+                Button browseFolder = Ui.SmallButton(Strings.Get("common.folder"));
                 browseFolder.Margin = new Thickness(6, 0, 0, 0);
                 browseFolder.Click += delegate { BrowseFolder(item); };
                 _browseBlock.Children.Add(browseFolder);
@@ -1098,7 +1222,7 @@ namespace DialMenu
                     item.Args = _fArgs.Text;
                     AfterEdit(item, false);
                 };
-                _argsBlock = FieldBlock("Argumente (optional)", _fArgs, 14);
+                _argsBlock = FieldBlock(Strings.Get("commands.args"), _fArgs, 14);
                 stack.Children.Add(_argsBlock);
 
                 _fHint = Ui.TextField();
@@ -1109,7 +1233,7 @@ namespace DialMenu
                     item.Hint = _fHint.Text;
                     AfterEdit(item, true);
                 };
-                stack.Children.Add(FieldBlock("Kurzhinweis im Menü (optional)", _fHint, 14));
+                stack.Children.Add(FieldBlock(Strings.Get("commands.hint"), _fHint, 14));
 
                 // Symbol
                 stack.Children.Add(BuildIconBlock(item));
@@ -1118,7 +1242,7 @@ namespace DialMenu
                 _macroBlock = new StackPanel();
                 _macroBlock.Margin = new Thickness(0, 16, 0, 0);
 
-                TextBlock macroCaption = SectionLabel("Ablauf");
+                TextBlock macroCaption = SectionLabel(Strings.Get("commands.macroSection"));
                 _macroBlock.Children.Add(macroCaption);
 
                 Grid macroRow = new Grid();
@@ -1130,7 +1254,7 @@ namespace DialMenu
                 _macroSummary.VerticalAlignment = VerticalAlignment.Center;
                 macroRow.Children.Add(_macroSummary);
 
-                Button editSteps = Ui.Button("Schritte bearbeiten…");
+                Button editSteps = Ui.Button(Strings.Get("commands.steps"));
                 editSteps.VerticalAlignment = VerticalAlignment.Center;
                 editSteps.Margin = new Thickness(10, 0, 0, 0);
                 editSteps.Click += delegate
@@ -1176,13 +1300,12 @@ namespace DialMenu
             icon.HorizontalAlignment = HorizontalAlignment.Left;
             stack.Children.Add(icon);
 
-            TextBlock title = Ui.Heading("Kein Befehl ausgewählt", 14);
+            TextBlock title = Ui.Heading(Strings.Get("commands.emptyTitle"), 14);
             title.Margin = new Thickness(0, 12, 0, 0);
+            title.TextWrapping = TextWrapping.Wrap;
             stack.Children.Add(title);
 
-            TextBlock text = Ui.Text(
-                "Wähle links einen Befehl aus oder lege mit „Befehl hinzufügen“ einen neuen an.",
-                12.5, Ui.InkMuted);
+            TextBlock text = Ui.Text(Strings.Get("commands.emptyHint"), 12.5, Ui.InkMuted);
             text.Margin = new Thickness(0, 4, 0, 0);
             text.TextWrapping = TextWrapping.Wrap;
             stack.Children.Add(text);
@@ -1207,7 +1330,7 @@ namespace DialMenu
         {
             StackPanel block = new StackPanel();
             block.Margin = new Thickness(0, 16, 0, 0);
-            block.Children.Add(SectionLabel("Symbol"));
+            block.Children.Add(SectionLabel(Strings.Get("commands.icon")));
 
             // Obere Zeile: Vorschau und Beschriftung.
             Grid row = new Grid();
@@ -1236,14 +1359,13 @@ namespace DialMenu
             row.Children.Add(iconText);
 
             _iconName = Ui.Text(
-                string.IsNullOrEmpty(item.Icon) ? "Automatisch nach Art und Ziel"
-                    : "Gewählt: " + item.Icon,
+                string.IsNullOrEmpty(item.Icon) ? Strings.Get("commands.iconAuto")
+                    : Strings.Format("commands.iconChosen", item.Icon),
                 12, Ui.InkSoft);
             _iconName.TextTrimming = TextTrimming.CharacterEllipsis;
             iconText.Children.Add(_iconName);
 
-            TextBlock iconNote = Ui.Text("Ohne Auswahl bestimmt DialMenu das Symbol selbst.",
-                11, Ui.InkMuted);
+            TextBlock iconNote = Ui.Text(Strings.Get("commands.iconNote"), 11, Ui.InkMuted);
             iconNote.TextWrapping = TextWrapping.Wrap;
             iconText.Children.Add(iconNote);
 
@@ -1253,18 +1375,18 @@ namespace DialMenu
             WrapPanel iconButtons = new WrapPanel();
             iconButtons.Margin = new Thickness(0, 10, 0, 0);
 
-            Button pick = Ui.SmallButton("Symbol wählen…");
+            Button pick = Ui.SmallButton(Strings.Get("commands.iconPick"));
             pick.Margin = new Thickness(0, 0, 6, 6);
             pick.Click += delegate { PickIcon(item); };
             iconButtons.Children.Add(pick);
 
-            Button resetIcon = Ui.SmallButton("Zurücksetzen");
+            Button resetIcon = Ui.SmallButton(Strings.Get("commands.iconReset"));
             resetIcon.Margin = new Thickness(0, 0, 0, 6);
             resetIcon.Click += delegate
             {
                 item.Icon = "";
                 if (_iconPreview != null) _iconPreview.Content = GlyphFor(item, 20, Ui.Ink);
-                if (_iconName != null) _iconName.Text = "Automatisch nach Art und Ziel";
+                if (_iconName != null) _iconName.Text = Strings.Get("commands.iconAuto");
                 AfterEdit(item, true);
             };
             iconButtons.Children.Add(resetIcon);
@@ -1283,8 +1405,8 @@ namespace DialMenu
             if (_iconPreview != null) _iconPreview.Content = GlyphFor(item, 20, Ui.Ink);
             if (_iconName != null)
                 _iconName.Text = string.IsNullOrEmpty(item.Icon)
-                    ? "Automatisch nach Art und Ziel"
-                    : "Gewählt: " + item.Icon;
+                    ? Strings.Get("commands.iconAuto")
+                    : Strings.Format("commands.iconChosen", item.Icon);
             AfterEdit(item, true);
         }
 
@@ -1292,29 +1414,16 @@ namespace DialMenu
         {
             switch (kind)
             {
-                case "program":
-                    return "Vollständiger Pfad oder Kurzname, zum Beispiel notepad.exe.";
-                case "url":
-                    return "Adresse, Ordner oder Datei – zum Beispiel https://youtube.com, C:\\Bilder oder ms-settings:";
-                case "shell":
-                    return "Wird ohne sichtbares Fenster ausgeführt.";
-                case "hotkey":
-                    return "Zum Beispiel Strg+Alt+M, Win+D oder F11.";
-                case "media":
-                    return "playpause, next, prev oder stop";
-                case "volume":
-                    return "up, down oder mute – die Argumente geben die Schritte an.";
-                case "system":
-                    return "lock, sleep, showdesktop, taskmgr, shutdown, restart oder logoff";
-                case "activate":
-                    return "Teil des Fenstertitels oder Programmname, zum Beispiel spotify";
-                case "discord":
-                    return "Ziel: toggle (Discords eigene Taste, Anzeige stimmt), mute oder unmute " +
-                        "(systemweit, ohne Anzeige in Discord) sowie deafen oder toggledeafen. " +
-                        "In den Argumenten steht optional die Tastenkombination aus Discord; " +
-                        "ohne Angabe gilt Strg+Shift+M.";
-                case "macro":
-                    return "Ein Makro braucht kein Ziel – die Ablaufschritte zählen.";
+                case "program": return Strings.Get("commands.target.program");
+                case "url": return Strings.Get("commands.target.url");
+                case "shell": return Strings.Get("commands.target.shell");
+                case "hotkey": return Strings.Get("commands.target.hotkey");
+                case "media": return Strings.Get("commands.target.media");
+                case "volume": return Strings.Get("commands.target.volume");
+                case "system": return Strings.Get("commands.target.system");
+                case "activate": return Strings.Get("commands.target.activate");
+                case "discord": return Strings.Get("commands.target.discord");
+                case "macro": return Strings.Get("commands.target.macro");
             }
             return "";
         }
@@ -1352,7 +1461,7 @@ namespace DialMenu
             int count = item.Steps == null ? 0 : item.Steps.Count;
             if (count == 0)
             {
-                _macroSummary.Text = "Noch keine Schritte hinterlegt.";
+                _macroSummary.Text = Strings.Get("commands.macroNone");
                 return;
             }
 
@@ -1362,17 +1471,19 @@ namespace DialMenu
                 MacroStep step = item.Steps[i];
                 switch (step.Type)
                 {
-                    case "hotkey": parts.Add(string.IsNullOrEmpty(step.Value) ? "Tastenkombination" : step.Value); break;
-                    case "text": parts.Add(string.IsNullOrEmpty(step.Value) ? "Text" : "„" + Shorten(step.Value, 14) + "“"); break;
-                    case "delay": parts.Add("Pause"); break;
-                    case "program": parts.Add(string.IsNullOrEmpty(step.Value) ? "Programm" : Shorten(step.Value, 18)); break;
+                    case "hotkey": parts.Add(string.IsNullOrEmpty(step.Value) ? Strings.Get("commands.stepHotkey") : step.Value); break;
+                    case "text": parts.Add(string.IsNullOrEmpty(step.Value) ? Strings.Get("commands.stepText") : "„" + Shorten(step.Value, 14) + "“"); break;
+                    case "delay": parts.Add(Strings.Get("commands.stepDelay")); break;
+                    case "program": parts.Add(string.IsNullOrEmpty(step.Value) ? Strings.Get("commands.stepProgram") : Shorten(step.Value, 18)); break;
                     default: parts.Add(step.Type); break;
                 }
             }
 
             string summary = string.Join(" · ", parts.ToArray());
             if (count > 4) summary += " · …";
-            _macroSummary.Text = count + " Schritte: " + summary;
+            _macroSummary.Text = (count == 1
+                ? Strings.Get("commands.stepsOne")
+                : Strings.Format("commands.stepsMany", count)) + ": " + summary;
         }
 
         static string Shorten(string value, int max)
@@ -1402,7 +1513,7 @@ namespace DialMenu
 
             StackPanel stack = new StackPanel();
 
-            TextBlock caption = Ui.Text("Bitte prüfen", 11.5, Ui.Warn);
+            TextBlock caption = Ui.Text(Strings.Get("commands.checkCaption"), 11.5, Ui.Warn);
             caption.FontWeight = FontWeights.SemiBold;
             stack.Children.Add(caption);
 
@@ -1436,6 +1547,10 @@ namespace DialMenu
             }
 
             UpdateValidation(item);
+            // Auch der Weg ohne Listenaufbau muss die Vorschau nachziehen:
+            // Symbol und Art ändern sich hierüber, und die Vorschau zeigt
+            // beides.
+            RefreshRingPreview();
             MarkDirty();
         }
 
@@ -1443,6 +1558,35 @@ namespace DialMenu
         {
             _debounce.Stop();
             _debounce.Start();
+        }
+
+        // Sprache wechseln: erst die Konfiguration, dann der Neuaufbau.
+        // Der gesamte Baum wird neu erzeugt, weil die Texte beim Bauen
+        // gelesen werden - einzelne Beschriftungen liessen sich sonst nicht
+        // nachziehen. Die gewaehlte Seite bleibt erhalten.
+        void SwitchLanguage(string code)
+        {
+            if (string.IsNullOrEmpty(code)) return;
+
+            _config.Language = code;
+            Strings.Current = code;
+
+            _debounce.Stop();
+            string section = _section;
+            ActionItem selected = _selected;
+
+            LocalizeSeededDefaults();
+            BuildUi();
+            ShowSection(section);
+
+            // Die Auswahl im Befehlseditor ueber den Neuaufbau retten.
+            if (section == "befehle" && selected != null && _profile != null)
+            {
+                int index = _profile.Actions.IndexOf(selected);
+                if (index >= 0) SelectAction(index);
+            }
+
+            Push();
         }
 
         void Push()
@@ -1480,7 +1624,7 @@ namespace DialMenu
             if (index < 0) return;
 
             ActionItem copy = _selected.Clone();
-            copy.Label = _selected.Label + " (Kopie)";
+            copy.Label = _selected.Label + Strings.Get("commands.copySuffix");
             _profile.Actions.Insert(index + 1, copy);
 
             RefreshActionList();
@@ -1497,8 +1641,8 @@ namespace DialMenu
 
             string label = _selected.Label;
             MessageBoxResult answer = MessageBox.Show(
-                "„" + label + "“ aus dem Menü entfernen?",
-                "Befehl entfernen", MessageBoxButton.OKCancel, MessageBoxImage.Question);
+                Strings.Format("commands.deleteQuestion", label),
+                Strings.Get("commands.deleteTitle"), MessageBoxButton.OKCancel, MessageBoxImage.Question);
             if (answer != MessageBoxResult.OK) return;
 
             _profile.Actions.RemoveAt(index);
@@ -1536,7 +1680,7 @@ namespace DialMenu
             if (_config.Profiles.Count == 0)
             {
                 _profile = new Profile();
-                _profile.Name = "Hauptprofil";
+                _profile.Name = Strings.Get("profiles.defaultName");
                 _config.Profiles.Add(_profile);
             }
             else
@@ -1549,16 +1693,16 @@ namespace DialMenu
         void BrowseFile(ActionItem item)
         {
             Microsoft.Win32.OpenFileDialog dialog = new Microsoft.Win32.OpenFileDialog();
-            dialog.Title = "Programm oder Datei wählen";
-            dialog.Filter = "Programme (*.exe;*.bat;*.cmd)|*.exe;*.bat;*.cmd|Alle Dateien (*.*)|*.*";
+            dialog.Title = Strings.Get("commands.browseFileTitle");
+            dialog.Filter = Strings.Get("commands.browseFilter");
 
             if (dialog.ShowDialog(this) != true) return;
 
             item.Target = dialog.FileName;
             if (_fTarget != null) _fTarget.Text = dialog.FileName;
 
-            if (string.IsNullOrWhiteSpace(item.Label) || item.Label == "Neue Aktion"
-                || item.Label == "Neuer Befehl")
+            if (string.IsNullOrWhiteSpace(item.Label) || Strings.IsTranslated("commands.defaultLabel", item.Label)
+                || Strings.IsTranslated("commands.newCommand", item.Label))
             {
                 string name = System.IO.Path.GetFileNameWithoutExtension(dialog.FileName);
                 item.Label = name;
@@ -1579,7 +1723,7 @@ namespace DialMenu
         void BrowseFolder(ActionItem item)
         {
             System.Windows.Forms.FolderBrowserDialog dialog = new System.Windows.Forms.FolderBrowserDialog();
-            dialog.Description = "Ordner wählen";
+            dialog.Description = Strings.Get("commands.browseFolder");
 
             if (dialog.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
 
@@ -1596,8 +1740,8 @@ namespace DialMenu
         FrameworkElement BuildProfilesPage()
         {
             StackPanel body = PageBody();
-            body.Children.Add(PageHeader("Profile",
-                "Jedes Profil hat einen eigenen Ring. Das aktive Profil bestimmt, was der Regler zeigt.", null));
+            body.Children.Add(PageHeader(Strings.Get("profiles.title"),
+                Strings.Get("profiles.subtitle"), null));
 
             StackPanel list = new StackPanel();
             list.Margin = new Thickness(0, 18, 0, 0);
@@ -1610,7 +1754,7 @@ namespace DialMenu
 
             body.Children.Add(Card(null, null, list));
 
-            Button create = Ui.Button("Neues Profil");
+            Button create = Ui.Button(Strings.Get("profiles.new"));
             create.HorizontalAlignment = HorizontalAlignment.Left;
             create.Margin = new Thickness(0, 14, 0, 0);
             create.Click += delegate
@@ -1629,14 +1773,14 @@ namespace DialMenu
         string NextProfileName()
         {
             int number = _config.Profiles.Count + 1;
-            string name = "Profil " + number;
+            string name = Strings.Format("profiles.namePrefix", number);
             bool taken = true;
             while (taken)
             {
                 taken = false;
                 foreach (Profile p in _config.Profiles)
                     if (string.Equals(p.Name, name, StringComparison.Ordinal)) { taken = true; break; }
-                if (taken) { number++; name = "Profil " + number; }
+                if (taken) { number++; name = Strings.Format("profiles.namePrefix", number); }
             }
             return name;
         }
@@ -1670,7 +1814,7 @@ namespace DialMenu
                 badge.Margin = new Thickness(8, 1, 0, 0);
                 badge.VerticalAlignment = VerticalAlignment.Center;
 
-                TextBlock badgeText = Ui.Text("Aktiv", 10, Ui.Accent);
+                TextBlock badgeText = Ui.Text(Strings.Get("profiles.active"), 10, Ui.Accent);
                 badgeText.FontWeight = FontWeights.SemiBold;
                 badge.Child = badgeText;
                 titleLine.Children.Add(badge);
@@ -1680,7 +1824,8 @@ namespace DialMenu
 
             int count = profile.Actions == null ? 0 : profile.Actions.Count;
             TextBlock detail = Ui.Text(
-                count == 1 ? "1 Befehl" : count + " Befehle", 11.5, Ui.InkMuted);
+                count == 1 ? Strings.Get("commands.countOne")
+                    : Strings.Format("commands.countMany", count), 11.5, Ui.InkMuted);
             detail.Margin = new Thickness(0, 2, 0, 0);
             info.Children.Add(detail);
 
@@ -1692,7 +1837,7 @@ namespace DialMenu
 
             if (!active)
             {
-                Button activate = Ui.SmallButton("Aktivieren");
+                Button activate = Ui.SmallButton(Strings.Get("common.activate"));
                 activate.Margin = new Thickness(0, 0, 6, 0);
                 activate.Click += delegate
                 {
@@ -1705,7 +1850,7 @@ namespace DialMenu
                 actions.Children.Add(activate);
             }
 
-            Button rename = Ui.SmallButton("Umbenennen");
+            Button rename = Ui.SmallButton(Strings.Get("common.rename"));
             rename.Margin = new Thickness(0, 0, 6, 0);
             rename.Click += delegate
             {
@@ -1717,12 +1862,12 @@ namespace DialMenu
             };
             actions.Children.Add(rename);
 
-            Button duplicate = Ui.SmallButton("Duplizieren");
+            Button duplicate = Ui.SmallButton(Strings.Get("common.duplicate"));
             duplicate.Margin = new Thickness(0, 0, 6, 0);
             duplicate.Click += delegate
             {
                 Profile copy = new Profile();
-                copy.Name = profile.Name + " (Kopie)";
+                copy.Name = profile.Name + Strings.Get("commands.copySuffix");
                 copy.Actions = new List<ActionItem>();
                 foreach (ActionItem item in profile.Actions) copy.Actions.Add(item.Clone());
                 _config.Profiles.Insert(_config.Profiles.IndexOf(profile) + 1, copy);
@@ -1731,15 +1876,15 @@ namespace DialMenu
             };
             actions.Children.Add(duplicate);
 
-            Button delete = Ui.SmallButton("Löschen");
+            Button delete = Ui.SmallButton(Strings.Get("common.delete"));
             delete.IsEnabled = _config.Profiles.Count > 1;
             delete.Click += delegate
             {
                 if (_config.Profiles.Count <= 1) return;
 
                 MessageBoxResult answer = MessageBox.Show(
-                    "Profil „" + profile.Name + "“ mit allen Befehlen löschen?",
-                    "Profil löschen", MessageBoxButton.OKCancel, MessageBoxImage.Question);
+                    Strings.Format("profiles.deleteQuestion", profile.Name),
+                    Strings.Get("profiles.deleteTitle"), MessageBoxButton.OKCancel, MessageBoxImage.Question);
                 if (answer != MessageBoxResult.OK) return;
 
                 _config.Profiles.Remove(profile);
@@ -1773,7 +1918,7 @@ namespace DialMenu
         string PromptForName(string current)
         {
             Window dialog = new Window();
-            dialog.Title = "Profil umbenennen";
+            dialog.Title = Strings.Get("profiles.renameTitle");
             dialog.Width = 380;
             dialog.SizeToContent = SizeToContent.Height;
             dialog.ResizeMode = ResizeMode.NoResize;
@@ -1792,19 +1937,19 @@ namespace DialMenu
             TextBox field = Ui.TextField();
             field.Text = current ?? "";
             field.SelectAll();
-            body.Children.Add(FieldBlock("Name", field, 0));
+            body.Children.Add(FieldBlock(Strings.Get("profiles.name"), field, 0));
 
             StackPanel buttons = new StackPanel();
             buttons.Orientation = Orientation.Horizontal;
             buttons.HorizontalAlignment = HorizontalAlignment.Right;
             buttons.Margin = new Thickness(0, 18, 0, 0);
 
-            Button cancel = Ui.Button("Abbrechen");
+            Button cancel = Ui.Button(Strings.Get("common.cancel"));
             cancel.Margin = new Thickness(0, 0, 8, 0);
             cancel.Click += delegate { dialog.Close(); };
             buttons.Children.Add(cancel);
 
-            Button save = Ui.PrimaryButton("Übernehmen");
+            Button save = Ui.PrimaryButton(Strings.Get("common.apply"));
             save.IsDefault = true;
             save.Click += delegate
             {
@@ -1830,20 +1975,20 @@ namespace DialMenu
         FrameworkElement BuildDevicesPage()
         {
             StackPanel body = PageBody();
-            body.Children.Add(PageHeader("Geräte",
-                "DialMenu liest die Rohdaten des Drehreglers über HID und ordnet sie dem passenden Gerät zu.", null));
+            body.Children.Add(PageHeader(Strings.Get("devices.title"),
+                Strings.Get("devices.subtitle"), null));
 
             // Angeschlossene Geräte
             StackPanel attached = new StackPanel();
 
-            _deviceStatus = Ui.Text("Suche läuft …", 11.5, Ui.InkMuted);
+            _deviceStatus = Ui.Text(Strings.Get("devices.searching"), 11.5, Ui.InkMuted);
             _deviceStatus.Margin = new Thickness(0, 0, 0, 8);
             attached.Children.Add(_deviceStatus);
 
             _attachedRows = new StackPanel();
             attached.Children.Add(_attachedRows);
 
-            body.Children.Add(Card("Angeschlossen", null, attached));
+            body.Children.Add(Card(Strings.Get("devices.attached"), null, attached));
 
             // Eingerichtete Geräte
             StackPanel configured = new StackPanel();
@@ -1851,14 +1996,14 @@ namespace DialMenu
             _configuredRows = new StackPanel();
             configured.Children.Add(_configuredRows);
 
-            Button addPreset = Ui.Button("Standard-Gerät hinzufügen (ISY IGK-6500)");
+            Button addPreset = Ui.Button(Strings.Get("devices.addStandard"));
             addPreset.HorizontalAlignment = HorizontalAlignment.Left;
             addPreset.Margin = new Thickness(0, 12, 0, 0);
             addPreset.Click += delegate { AddStandardDevice(); };
             configured.Children.Add(addPreset);
 
-            body.Children.Add(Card("Eingerichtet",
-                "Nur eingerichtete und aktivierte Geräte lösen das Menü aus.", configured));
+            body.Children.Add(Card(Strings.Get("devices.configured"),
+                Strings.Get("devices.configuredNote"), configured));
 
             RebuildConfiguredDevices();
             StartDiscovery();
@@ -1873,7 +2018,7 @@ namespace DialMenu
             _discoverError = null;
             _discovered = null;
 
-            if (_deviceStatus != null) _deviceStatus.Text = "Suche läuft …";
+            if (_deviceStatus != null) _deviceStatus.Text = Strings.Get("devices.searching");
 
             Thread worker = new Thread(delegate()
             {
@@ -1936,28 +2081,26 @@ namespace DialMenu
             {
                 if (_discoverError != null)
                 {
-                    _deviceStatus.Text = "Suche nicht möglich: " + _discoverError;
+                    _deviceStatus.Text = Strings.Format("devices.searchFailed", _discoverError);
                     _deviceStatus.Foreground = Ui.Warn;
                 }
                 else if (_discovered == null || _discovered.Count == 0)
                 {
-                    _deviceStatus.Text = "Kein passendes Eingabegerät gefunden.";
+                    _deviceStatus.Text = Strings.Get("devices.foundNone");
                     _deviceStatus.Foreground = Ui.InkMuted;
                 }
                 else
                 {
                     _deviceStatus.Text = _discovered.Count == 1
-                        ? "1 Gerät gefunden"
-                        : _discovered.Count + " Geräte gefunden";
+                        ? Strings.Get("devices.foundOne")
+                        : Strings.Format("devices.foundMany", _discovered.Count);
                     _deviceStatus.Foreground = Ui.InkMuted;
                 }
             }
 
             if (_discovered == null || _discovered.Count == 0)
             {
-                TextBlock hint = Ui.Text(
-                    "Regler anschließen und die Seite erneut öffnen, um erneut zu suchen.",
-                    12, Ui.InkMuted);
+                TextBlock hint = Ui.Text(Strings.Get("devices.hint"), 12, Ui.InkMuted);
                 hint.TextWrapping = TextWrapping.Wrap;
                 hint.Margin = new Thickness(0, 6, 0, 0);
                 _attachedRows.Children.Add(hint);
@@ -1972,7 +2115,7 @@ namespace DialMenu
                 _attachedRows.Children.Add(DeviceDataRow(device, i == _discovered.Count - 1));
             }
 
-            Button rescan = Ui.SmallButton("Erneut suchen");
+            Button rescan = Ui.SmallButton(Strings.Get("devices.rescan"));
             rescan.HorizontalAlignment = HorizontalAlignment.Left;
             rescan.Margin = new Thickness(0, 12, 0, 0);
             rescan.Click += delegate { StartDiscovery(); };
@@ -1988,9 +2131,9 @@ namespace DialMenu
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(96) });
             grid.Margin = new Thickness(0, 0, 0, 6);
 
-            AddCell(grid, 0, "Gerät", true);
-            AddCell(grid, 1, "Hersteller", true);
-            AddCell(grid, 2, "Produkt", true);
+            AddCell(grid, 0, Strings.Get("devices.headerName"), true);
+            AddCell(grid, 1, Strings.Get("devices.headerVendor"), true);
+            AddCell(grid, 2, Strings.Get("devices.headerProduct"), true);
             AddCell(grid, 3, "", true);
             return grid;
         }
@@ -2017,10 +2160,13 @@ namespace DialMenu
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(78) });
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(96) });
 
-            string name = string.IsNullOrEmpty(device.Name) ? "Unbenanntes Gerät" : device.Name;
+            string name = string.IsNullOrEmpty(device.Name)
+                ? Strings.Get("devices.unnamed") : device.Name;
             TextBlock nameCell = Ui.Text(name, 12.5, Ui.Ink);
             nameCell.TextTrimming = TextTrimming.CharacterEllipsis;
             nameCell.VerticalAlignment = VerticalAlignment.Center;
+            // Ohne Abstand stossen lange Geraetenamen an die Herstellerspalte.
+            nameCell.Margin = new Thickness(0, 0, 8, 0);
             nameCell.ToolTip = device.Path;
             grid.Children.Add(nameCell);
 
@@ -2036,12 +2182,11 @@ namespace DialMenu
                 && !device.Match.Contains("VID_0000")
                 && !device.Match.Contains("PID_0000");
 
-            Button action = Ui.SmallButton(configured ? "Eingerichtet"
-                : (addressable ? "Hinzufügen" : "Nicht wählbar"));
+            Button action = Ui.SmallButton(configured ? Strings.Get("devices.configuredState")
+                : (addressable ? Strings.Get("common.add") : Strings.Get("devices.notSelectable")));
             action.IsEnabled = !configured && addressable;
             if (!addressable)
-                action.ToolTip = "Dieses Gerät meldet keine eigene Kennung. "
-                    + "Es lässt sich nicht zuverlässig wiedererkennen.";
+                action.ToolTip = Strings.Get("devices.notSelectableTip");
             action.HorizontalAlignment = HorizontalAlignment.Right;
             action.Click += delegate
             {
@@ -2090,7 +2235,7 @@ namespace DialMenu
 
             if (_config.Devices.Count == 0)
             {
-                TextBlock empty = Ui.Text("Noch kein Gerät eingerichtet.", 12, Ui.InkMuted);
+                TextBlock empty = Ui.Text(Strings.Get("devices.none"), 12, Ui.InkMuted);
                 empty.Margin = new Thickness(0, 2, 0, 2);
                 _configuredRows.Children.Add(empty);
                 return;
@@ -2117,8 +2262,8 @@ namespace DialMenu
             StackPanel info = new StackPanel();
             info.VerticalAlignment = VerticalAlignment.Center;
 
-            TextBlock name = Ui.Text(string.IsNullOrEmpty(binding.Name) ? "Unbenanntes Gerät" : binding.Name,
-                12.5, Ui.Ink);
+            TextBlock name = Ui.Text(string.IsNullOrEmpty(binding.Name)
+                ? Strings.Get("devices.unnamed") : binding.Name, 12.5, Ui.Ink);
             info.Children.Add(name);
 
             bool attached = IsAttached(binding);
@@ -2128,11 +2273,12 @@ namespace DialMenu
             meta.Margin = new Thickness(0, 2, 0, 0);
 
             TextBlock match = Ui.Text(
-                string.IsNullOrEmpty(binding.Match) ? "kein Muster" : binding.Match, 11, Ui.InkMuted);
+                string.IsNullOrEmpty(binding.Match) ? Strings.Get("devices.noMatch")
+                    : binding.Match, 11, Ui.InkMuted);
             meta.Children.Add(match);
 
-            TextBlock state = Ui.Text(attached ? "  ·  angeschlossen" : "  ·  nicht angeschlossen",
-                11, attached ? Ui.InkMuted : Ui.Warn);
+            TextBlock state = Ui.Text(attached ? Strings.Get("devices.attachedState")
+                : Strings.Get("devices.detachedState"), 11, attached ? Ui.InkMuted : Ui.Warn);
             meta.Children.Add(state);
 
             info.Children.Add(meta);
@@ -2142,7 +2288,7 @@ namespace DialMenu
             actions.Orientation = Orientation.Horizontal;
             actions.VerticalAlignment = VerticalAlignment.Center;
 
-            CheckBox enabled = Check("Aktiv", binding.Enabled, null);
+            CheckBox enabled = Check(Strings.Get("devices.enabled"), binding.Enabled, null);
             enabled.Margin = new Thickness(0, 0, 12, 0);
             enabled.Click += delegate
             {
@@ -2151,7 +2297,7 @@ namespace DialMenu
             };
             actions.Children.Add(enabled);
 
-            Button rename = Ui.SmallButton("Umbenennen");
+            Button rename = Ui.SmallButton(Strings.Get("common.rename"));
             rename.Margin = new Thickness(0, 0, 6, 0);
             rename.Click += delegate
             {
@@ -2164,7 +2310,7 @@ namespace DialMenu
             };
             actions.Children.Add(rename);
 
-            Button remove = Ui.SmallButton("Entfernen");
+            Button remove = Ui.SmallButton(Strings.Get("common.remove"));
             remove.Click += delegate
             {
                 _config.Devices.Remove(binding);
@@ -2196,7 +2342,7 @@ namespace DialMenu
             {
                 if (binding.Match == "VID_258A&PID_017E")
                 {
-                    MessageBox.Show("Das Standard-Gerät ist bereits eingerichtet.",
+                    MessageBox.Show(Strings.Get("devices.standardAlready"),
                         "DialMenu", MessageBoxButton.OK, MessageBoxImage.Information);
                     return;
                 }
@@ -2224,27 +2370,28 @@ namespace DialMenu
             "oben mitte", "unten mitte", "mitte", "zeiger"
         };
 
-        static readonly string[] PositionLabels =
+        static readonly string[] PositionKeys =
         {
-            "Unten rechts", "Unten links", "Oben rechts", "Oben links",
-            "Rechts oben", "Rechts mitte", "Rechts unten",
-            "Links oben", "Links mitte", "Links unten",
-            "Oben mitte", "Unten mitte", "Mitte",
-            "Am Mauszeiger (Monitor unter dem Zeiger)"
+            "appearance.pos.bottomRight", "appearance.pos.bottomLeft",
+            "appearance.pos.topRight", "appearance.pos.topLeft",
+            "appearance.pos.rightTop", "appearance.pos.rightCenter", "appearance.pos.rightBottom",
+            "appearance.pos.leftTop", "appearance.pos.leftCenter", "appearance.pos.leftBottom",
+            "appearance.pos.topCenter", "appearance.pos.bottomCenter",
+            "appearance.pos.center", "appearance.pos.pointer"
         };
 
         FrameworkElement BuildAppearancePage()
         {
             StackPanel body = PageBody();
-            body.Children.Add(PageHeader("Darstellung",
-                "Wo und wie groß der Ring erscheint.", null));
+            body.Children.Add(PageHeader(Strings.Get("appearance.title"),
+                Strings.Get("appearance.subtitle"), null));
 
             // Position
             StackPanel positionBlock = new StackPanel();
 
             SelectControl position = new SelectControl();
             List<string> labels = new List<string>();
-            for (int i = 0; i < PositionLabels.Length; i++) labels.Add(PositionLabels[i]);
+            for (int i = 0; i < PositionKeys.Length; i++) labels.Add(Strings.Get(PositionKeys[i]));
             position.SetItems(labels);
 
             int index = IndexOfPosition(_config.Position);
@@ -2257,16 +2404,14 @@ namespace DialMenu
                 MarkDirty();
             };
 
-            positionBlock.Children.Add(FieldBlock("Position", position, 0));
+            positionBlock.Children.Add(FieldBlock(Strings.Get("appearance.position"), position, 0));
 
-            TextBlock positionNote = Ui.Text(
-                "„Am Mauszeiger“ folgt dem Bildschirm, auf dem sich der Zeiger gerade befindet.",
-                11, Ui.InkMuted);
+            TextBlock positionNote = Ui.Text(Strings.Get("appearance.positionNote"), 11, Ui.InkMuted);
             positionNote.TextWrapping = TextWrapping.Wrap;
             positionNote.Margin = new Thickness(0, 5, 0, 0);
             positionBlock.Children.Add(positionNote);
 
-            body.Children.Add(Card("Position", null, positionBlock));
+            body.Children.Add(Card(Strings.Get("appearance.position"), null, positionBlock));
 
             // Groesse
             StackPanel scaleBlock = new StackPanel();
@@ -2301,7 +2446,7 @@ namespace DialMenu
             scaleFoot.Orientation = Orientation.Horizontal;
             scaleFoot.Margin = new Thickness(0, 10, 0, 0);
 
-            Button preview = Ui.SmallButton("Im Overlay ansehen");
+            Button preview = Ui.SmallButton(Strings.Get("app.preview"));
             preview.Click += delegate { _app.PreviewOverlay(); };
             scaleFoot.Children.Add(preview);
 
@@ -2311,12 +2456,15 @@ namespace DialMenu
             scaleFoot.Children.Add(scaleNote);
 
             scaleBlock.Children.Add(scaleFoot);
-            body.Children.Add(Card("Größe", null, scaleBlock));
+            body.Children.Add(Card(Strings.Get("appearance.scale"), null, scaleBlock));
+
+            body.Children.Add(BuildBrightnessCard());
+            body.Children.Add(BuildRingCard());
 
             // Beschriftungen
             StackPanel labelsBlock = new StackPanel();
 
-            CheckBox showLabels = Check("Beschriftungen im Ring anzeigen", _config.ShowLabels, null);
+            CheckBox showLabels = Check(Strings.Get("appearance.labels"), _config.ShowLabels, null);
             showLabels.Click += delegate
             {
                 _config.ShowLabels = showLabels.IsChecked == true;
@@ -2324,14 +2472,12 @@ namespace DialMenu
             };
             labelsBlock.Children.Add(showLabels);
 
-            TextBlock labelsNote = Ui.Text(
-                "Ohne Beschriftungen bleibt nur das Symbol sichtbar – ruhiger, aber weniger eindeutig.",
-                11, Ui.InkMuted);
+            TextBlock labelsNote = Ui.Text(Strings.Get("appearance.labelsNote"), 11, Ui.InkMuted);
             labelsNote.TextWrapping = TextWrapping.Wrap;
             labelsNote.Margin = new Thickness(24, 5, 0, 0);
             labelsBlock.Children.Add(labelsNote);
 
-            body.Children.Add(Card("Beschriftungen", null, labelsBlock));
+            body.Children.Add(Card(Strings.Get("appearance.labels"), null, labelsBlock));
 
             return ScrollPage(body);
         }
@@ -2344,6 +2490,381 @@ namespace DialMenu
             return 0;
         }
 
+        // ------------------------------------------------ Helligkeit und Ring
+
+        static readonly string[] ModeKeys = { "auto", "dark", "light" };
+
+        static readonly string[] ModeKeyNames =
+        {
+            "appearance.modeAuto", "appearance.modeDark", "appearance.modeLight"
+        };
+
+        // Drei gleich breite Felder. Der gewaehlte Zustand ist allein am
+        // dunkleren, etwas staerkeren Rahmen erkennbar - keine Farbflaeche.
+        FrameworkElement BuildBrightnessCard()
+        {
+            StackPanel block = new StackPanel();
+
+            Grid row = new Grid();
+            _modeChips = new Border[ModeKeys.Length];
+
+            for (int i = 0; i < ModeKeys.Length; i++)
+            {
+                string key = ModeKeys[i];
+
+                row.ColumnDefinitions.Add(
+                    new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+                Border chip = AppearanceChip(key, Strings.Get(ModeKeyNames[i]));
+                chip.Margin = new Thickness(0, 0, i == ModeKeys.Length - 1 ? 0 : 8, 0);
+
+                chip.MouseLeftButtonUp += delegate
+                {
+                    _config.Appearance = key;
+                    Push();
+                    SyncAppearanceModes();
+                    SyncRingTiles();
+                };
+
+                Grid.SetColumn(chip, i);
+                row.Children.Add(chip);
+                _modeChips[i] = chip;
+            }
+
+            block.Children.Add(row);
+
+            TextBlock note = Ui.Text(Strings.Get("appearance.brightnessNote"), 11, Ui.InkMuted);
+            note.TextWrapping = TextWrapping.Wrap;
+            note.Margin = new Thickness(0, 10, 0, 0);
+            block.Children.Add(note);
+
+            SyncAppearanceModes();
+            return Card(Strings.Get("appearance.mode"), null, block);
+        }
+
+        Border AppearanceChip(string key, string label)
+        {
+            Border chip = new Border();
+            chip.Height = 38;
+            chip.CornerRadius = new CornerRadius(6);
+            chip.BorderThickness = new Thickness(1);
+            chip.BorderBrush = Ui.Line;
+            chip.Background = Ui.Subtle;
+            chip.Cursor = Cursors.Hand;
+            chip.Tag = key;
+            chip.Focusable = false;
+
+            TextBlock text = Ui.Text(label, 12.5, Ui.InkSoft);
+            text.HorizontalAlignment = HorizontalAlignment.Center;
+            text.VerticalAlignment = VerticalAlignment.Center;
+            text.TextAlignment = TextAlignment.Center;
+            text.TextTrimming = TextTrimming.None;
+            chip.Child = text;
+
+            chip.MouseEnter += delegate
+            {
+                if (!IsModeSelected(key)) chip.Background = Tokens.Hover;
+            };
+            chip.MouseLeave += delegate
+            {
+                if (!IsModeSelected(key)) chip.Background = Ui.Subtle;
+            };
+
+            return chip;
+        }
+
+        bool IsModeSelected(string key)
+        {
+            string current = string.IsNullOrEmpty(_config.Appearance) ? "auto" : _config.Appearance;
+            return string.Equals(current, key, StringComparison.OrdinalIgnoreCase);
+        }
+
+        void SyncAppearanceModes()
+        {
+            if (_modeChips == null) return;
+
+            for (int i = 0; i < _modeChips.Length; i++)
+            {
+                Border chip = _modeChips[i];
+                if (chip == null) continue;
+
+                bool active = IsModeSelected(chip.Tag as string);
+                chip.BorderThickness = new Thickness(active ? 1.5 : 1);
+                chip.BorderBrush = active ? Ui.Ink : Ui.Line;
+                chip.Background = active ? Brushes.White : Ui.Subtle;
+
+                TextBlock text = chip.Child as TextBlock;
+                if (text != null)
+                {
+                    text.Foreground = active ? Ui.Ink : Ui.InkSoft;
+                    text.FontWeight = active ? FontWeights.SemiBold : FontWeights.Normal;
+                }
+            }
+        }
+
+        // Vier Kacheln, je ein Thema. Die Vorschau zeigt immer die Fassung,
+        // die der Ring bei der gewaehlten Helligkeit wirklich benutzt.
+        FrameworkElement BuildRingCard()
+        {
+            StackPanel block = new StackPanel();
+
+            Grid row = new Grid();
+            int count = RingThemes.All.Count;
+            _themeTiles = new Border[count];
+            _themeSwatchHosts = new ContentControl[count];
+            _themeNames = new TextBlock[count];
+
+            for (int i = 0; i < count; i++)
+            {
+                RingTheme theme = RingThemes.All[i];
+
+                row.ColumnDefinitions.Add(
+                    new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+                Border tile = new Border();
+                tile.Padding = new Thickness(10, 12, 10, 14);
+                tile.CornerRadius = new CornerRadius(8);
+                tile.BorderThickness = new Thickness(1);
+                tile.BorderBrush = Ui.Line;
+                tile.Background = Brushes.Transparent;
+                tile.Cursor = Cursors.Hand;
+                tile.Margin = new Thickness(0, 0, i == count - 1 ? 0 : 10, 0);
+                tile.VerticalAlignment = VerticalAlignment.Stretch;
+
+                StackPanel inner = new StackPanel();
+
+                ContentControl host = new ContentControl();
+                host.Width = SwatchSize;
+                host.Height = SwatchSize;
+                host.HorizontalAlignment = HorizontalAlignment.Center;
+                inner.Children.Add(host);
+
+                TextBlock name = Ui.Text(ThemeName(theme), 12.5, Ui.Ink);
+                name.HorizontalAlignment = HorizontalAlignment.Center;
+                name.TextAlignment = TextAlignment.Center;
+                name.Margin = new Thickness(0, 10, 0, 0);
+                inner.Children.Add(name);
+
+                TextBlock note = Ui.Text(ThemeNote(theme), 11, Ui.InkMuted);
+                note.TextWrapping = TextWrapping.Wrap;
+                note.TextAlignment = TextAlignment.Center;
+                note.HorizontalAlignment = HorizontalAlignment.Stretch;
+                note.Margin = new Thickness(0, 3, 0, 0);
+                inner.Children.Add(note);
+
+                tile.Child = inner;
+
+                string id = theme.Id;
+                tile.MouseLeftButtonUp += delegate
+                {
+                    _config.RingTheme = id;
+                    Push();
+                    SyncRingTiles();
+                };
+                tile.MouseEnter += delegate
+                {
+                    tile.Background = Ui.Subtle;
+                };
+                tile.MouseLeave += delegate
+                {
+                    // Die Auswahl zeigt sich am Rahmen, nicht an der Flaeche -
+                    // deshalb faellt jede Kachel beim Verlassen zurueck.
+                    tile.Background = Brushes.Transparent;
+                };
+
+                Grid.SetColumn(tile, i);
+                row.Children.Add(tile);
+
+                _themeTiles[i] = tile;
+                _themeSwatchHosts[i] = host;
+                _themeNames[i] = name;
+            }
+
+            block.Children.Add(row);
+
+            TextBlock tilesNote = Ui.Text(Strings.Get("appearance.ringNote"), 11, Ui.InkMuted);
+            tilesNote.TextWrapping = TextWrapping.Wrap;
+            tilesNote.Margin = new Thickness(0, 12, 0, 0);
+            block.Children.Add(tilesNote);
+
+            SyncRingTiles();
+            return Card(Strings.Get("appearance.ring"), null, block);
+        }
+
+        bool IsThemeSelected(string id)
+        {
+            return string.Equals(_config.RingTheme, id, StringComparison.OrdinalIgnoreCase);
+        }
+
+        // Name und Erlaeuterung eines Themas kommen aus der Sprachtabelle;
+        // unbekannte Themen fallen auf ihren eigenen Text zurueck.
+        static string ThemeName(RingTheme theme)
+        {
+            string key = "ring." + theme.Id + ".name";
+            return Strings.Has(key) ? Strings.Get(key) : theme.Name;
+        }
+
+        static string ThemeNote(RingTheme theme)
+        {
+            string key = "ring." + theme.Id + ".note";
+            return Strings.Has(key) ? Strings.Get(key) : theme.Note;
+        }
+
+        void SyncRingTiles()
+        {
+            if (_themeTiles == null || _themeSwatchHosts == null) return;
+
+            bool light = Appearance.IsLight(_config.Appearance);
+
+            for (int i = 0; i < _themeTiles.Length; i++)
+            {
+                RingTheme baseTheme = RingThemes.All[i];
+                RingTheme theme = RingThemes.Get(baseTheme.Id, light);
+                bool active = IsThemeSelected(baseTheme.Id);
+
+                _themeSwatchHosts[i].Content = RingSwatch(theme);
+
+                Border tile = _themeTiles[i];
+                tile.BorderThickness = new Thickness(active ? 1.5 : 1);
+                tile.BorderBrush = active ? Ui.Ink : Ui.Line;
+                tile.Background = Brushes.Transparent;
+
+                if (_themeNames[i] != null)
+                    _themeNames[i].FontWeight = active
+                        ? FontWeights.SemiBold : FontWeights.Normal;
+            }
+        }
+
+        const double SwatchSize = 72;
+
+        // Der Ring als kleines Bild: acht Segmente auf einem Grund in der
+        // Farbe des Themas, ein Segment aktiv, in der Mitte die Narbe.
+        static FrameworkElement RingSwatch(RingTheme theme)
+        {
+            Border well = new Border();
+            well.Width = SwatchSize;
+            well.Height = SwatchSize;
+            well.CornerRadius = new CornerRadius(10);
+            well.Padding = new Thickness(3);
+            well.Background = Solid(theme.Ground);
+            well.BorderBrush = Ui.FieldLine;
+            well.BorderThickness = new Thickness(1);
+
+            double canvasSize = SwatchSize - 8;
+            double centre = canvasSize / 2.0;
+            double outer = centre - 2;
+            double inner = outer * 0.44;
+            System.Windows.Point middle = new System.Windows.Point(centre, centre);
+
+            Canvas canvas = new Canvas();
+            canvas.Width = canvasSize;
+            canvas.Height = canvasSize;
+
+            const int segments = 8;
+            const double gap = 5.0;
+            int active = 1;
+
+            for (int i = 0; i < segments; i++)
+            {
+                double start = -90 + i * (360.0 / segments) + gap / 2.0;
+                double end = -90 + (i + 1) * (360.0 / segments) - gap / 2.0;
+
+                bool hot = i == active;
+
+                Path segment = new Path();
+                segment.Data = RingSegment(middle, inner, outer, start, end);
+                segment.Fill = Vertical(
+                    hot ? theme.ActiveTop : theme.IdleTop,
+                    hot ? theme.ActiveBottom : theme.IdleBottom);
+                segment.Stroke = Solid(hot ? theme.ActiveStroke : theme.IdleStrokeTop);
+                segment.StrokeThickness = hot ? 1.1 : 0.8;
+                segment.SnapsToDevicePixels = false;
+                canvas.Children.Add(segment);
+            }
+
+            Ellipse hub = new Ellipse();
+            hub.Width = inner * 2;
+            hub.Height = inner * 2;
+            hub.Fill = Vertical(theme.CenterOuter, theme.CenterInner);
+            hub.Stroke = Solid(theme.CenterRimTop);
+            hub.StrokeThickness = 1;
+            Canvas.SetLeft(hub, centre - inner);
+            Canvas.SetTop(hub, centre - inner);
+            canvas.Children.Add(hub);
+
+            Ellipse dot = new Ellipse();
+            dot.Width = 5;
+            dot.Height = 5;
+            dot.Fill = Solid(theme.IconIdle);
+            Canvas.SetLeft(dot, centre - 2.5);
+            Canvas.SetTop(dot, centre - 2.5);
+            canvas.Children.Add(dot);
+
+            well.Child = canvas;
+            return well;
+        }
+
+        // Ein Ringsegment zwischen zwei Radien, im Uhrzeigersinn.
+        static Geometry RingSegment(System.Windows.Point centre, double inner,
+            double outer, double startDegrees, double endDegrees)
+        {
+            bool large = Math.Abs(endDegrees - startDegrees) > 180;
+
+            PathFigure figure = new PathFigure();
+            figure.StartPoint = Polar(centre, outer, startDegrees);
+            figure.IsClosed = true;
+            figure.IsFilled = true;
+
+            ArcSegment outside = new ArcSegment();
+            outside.Point = Polar(centre, outer, endDegrees);
+            outside.Size = new System.Windows.Size(outer, outer);
+            outside.IsLargeArc = large;
+            outside.SweepDirection = SweepDirection.Clockwise;
+            figure.Segments.Add(outside);
+
+            LineSegment edge = new LineSegment();
+            edge.Point = Polar(centre, inner, endDegrees);
+            figure.Segments.Add(edge);
+
+            ArcSegment inside = new ArcSegment();
+            inside.Point = Polar(centre, inner, startDegrees);
+            inside.Size = new System.Windows.Size(inner, inner);
+            inside.IsLargeArc = large;
+            inside.SweepDirection = SweepDirection.Counterclockwise;
+            figure.Segments.Add(inside);
+
+            PathGeometry geometry = new PathGeometry();
+            geometry.Figures.Add(figure);
+            geometry.Freeze();
+            return geometry;
+        }
+
+        static System.Windows.Point Polar(System.Windows.Point centre, double radius, double degrees)
+        {
+            double radians = degrees * Math.PI / 180.0;
+            return new System.Windows.Point(
+                centre.X + radius * Math.Cos(radians),
+                centre.Y + radius * Math.Sin(radians));
+        }
+
+        static LinearGradientBrush Vertical(Color top, Color bottom)
+        {
+            LinearGradientBrush brush = new LinearGradientBrush();
+            brush.StartPoint = new System.Windows.Point(0, 0);
+            brush.EndPoint = new System.Windows.Point(0, 1);
+            brush.GradientStops.Add(new GradientStop(top, 0));
+            brush.GradientStops.Add(new GradientStop(bottom, 1));
+            brush.Freeze();
+            return brush;
+        }
+
+        static SolidColorBrush Solid(Color color)
+        {
+            SolidColorBrush brush = new SolidColorBrush(color);
+            brush.Freeze();
+            return brush;
+        }
+
         // ==================================================================
         // Seite: Verhalten
         // ==================================================================
@@ -2351,13 +2872,13 @@ namespace DialMenu
         FrameworkElement BuildBehaviorPage()
         {
             StackPanel body = PageBody();
-            body.Children.Add(PageHeader("Verhalten",
-                "Wann das Menü erscheint, wie lange es bleibt und ob DialMenu mit Windows startet.", null));
+            body.Children.Add(PageHeader(Strings.Get("behavior.title"),
+                Strings.Get("behavior.subtitle"), null));
 
             // Allgemein
             StackPanel general = new StackPanel();
 
-            CheckBox enabled = Check("DialMenu aktiv", _config.Enabled, null);
+            CheckBox enabled = Check(Strings.Get("behavior.enabled"), _config.Enabled, null);
             enabled.Click += delegate
             {
                 _config.Enabled = enabled.IsChecked == true;
@@ -2365,14 +2886,39 @@ namespace DialMenu
             };
             general.Children.Add(enabled);
 
-            TextBlock enabledNote = Ui.Text(
-                "Deaktiviert bleibt das Programm im Infobereich, reagiert aber nicht auf den Regler.",
-                11, Ui.InkMuted);
+            TextBlock enabledNote = Ui.Text(Strings.Get("behavior.enabledNote"), 11, Ui.InkMuted);
             enabledNote.TextWrapping = TextWrapping.Wrap;
             enabledNote.Margin = new Thickness(24, 5, 0, 0);
             general.Children.Add(enabledNote);
 
-            body.Children.Add(Card("Allgemein", null, general));
+            // Sprache: die Auswahl wirkt sofort, der Aufbau laeuft danach neu.
+            TextBlock languageCaption = Ui.Text(Strings.Get("behavior.language"), 11, Ui.InkMuted);
+            languageCaption.Margin = new Thickness(0, 16, 0, 4);
+            general.Children.Add(languageCaption);
+
+            List<string> codes = Strings.Available;
+            List<string> names = new List<string>();
+            for (int i = 0; i < codes.Count; i++) names.Add(Strings.Name(codes[i]));
+
+            SelectControl language = new SelectControl();
+            language.SetItems(names);
+            for (int i = 0; i < codes.Count; i++)
+                if (codes[i] == _config.Language) language.SelectedIndex = i;
+            language.Changed += delegate
+            {
+                int index = language.SelectedIndex;
+                if (index < 0 || index >= codes.Count) return;
+                if (codes[index] == _config.Language) return;
+                SwitchLanguage(codes[index]);
+            };
+            general.Children.Add(language);
+
+            TextBlock languageNote = Ui.Text(Strings.Get("behavior.languageNote"), 11, Ui.InkMuted);
+            languageNote.TextWrapping = TextWrapping.Wrap;
+            languageNote.Margin = new Thickness(0, 5, 0, 0);
+            general.Children.Add(languageNote);
+
+            body.Children.Add(Card(Strings.Get("behavior.general"), null, general));
 
             // Ausblenden
             StackPanel hide = new StackPanel();
@@ -2402,9 +2948,9 @@ namespace DialMenu
                 MarkDirty();
             };
 
-            hide.Children.Add(FieldBlock("Menü ausblenden nach", hideRow, 0));
-            body.Children.Add(Card("Ausblenden",
-                "Gilt, solange der Regler nicht gedreht wird.", hide));
+            hide.Children.Add(FieldBlock(Strings.Get("behavior.hideAfter"), hideRow, 0));
+            body.Children.Add(Card(Strings.Get("behavior.hideTitle"),
+                Strings.Get("behavior.hideNote"), hide));
 
             // Langdruck
             StackPanel longPress = new StackPanel();
@@ -2434,14 +2980,14 @@ namespace DialMenu
                 MarkDirty();
             };
 
-            longPress.Children.Add(FieldBlock("Langdruck ab", longRow, 0));
-            body.Children.Add(Card("Langdruck",
-                "Ab dieser Dauer bricht der Druck die Auswahl ab, statt sie zu bestätigen.", longPress));
+            longPress.Children.Add(FieldBlock(Strings.Get("behavior.longPress"), longRow, 0));
+            body.Children.Add(Card(Strings.Get("behavior.longPressTitle"),
+                Strings.Get("behavior.longPressNote"), longPress));
 
             // Autostart
             StackPanel startup = new StackPanel();
 
-            CheckBox autostart = Check("Mit Windows starten", _config.StartWithWindows, null);
+            CheckBox autostart = Check(Strings.Get("behavior.autostart"), _config.StartWithWindows, null);
             autostart.Click += delegate
             {
                 _config.StartWithWindows = autostart.IsChecked == true;
@@ -2457,8 +3003,8 @@ namespace DialMenu
                 {
                     _autostartDetail.Text = detail;
                     _autostartDetail.Foreground =
-                        detail.StartsWith("Aktiv", StringComparison.Ordinal)
-                            || detail.StartsWith("Inaktiv", StringComparison.Ordinal)
+                        detail.StartsWith(Strings.Get("autostart.active"), StringComparison.Ordinal)
+                            || detail.StartsWith(Strings.Get("autostart.inactive"), StringComparison.Ordinal)
                             ? Ui.InkSoft : Ui.Warn;
                 }
             };
@@ -2480,20 +3026,21 @@ namespace DialMenu
             startup.Children.Add(_autostartPath);
 
             string command = Autostart.CommandLine();
-            TextBlock commandLabel = Ui.Text("Eingetragener Befehl", 11, Ui.InkMuted);
+            TextBlock commandLabel = Ui.Text(Strings.Get("behavior.commandLabel"), 11, Ui.InkMuted);
             commandLabel.Margin = new Thickness(24, 12, 0, 3);
             startup.Children.Add(commandLabel);
 
             TextBox commandField = Ui.TextField();
-            commandField.Text = string.IsNullOrEmpty(command) ? "(Programmpfad nicht ermittelbar)" : command;
+            commandField.Text = string.IsNullOrEmpty(command)
+                ? Strings.Get("behavior.commandMissing") : command;
             commandField.IsReadOnly = true;
             commandField.Margin = new Thickness(24, 0, 0, 0);
             commandField.Background = Ui.Subtle;
             commandField.TextWrapping = TextWrapping.Wrap;
             startup.Children.Add(commandField);
 
-            body.Children.Add(Card("Start",
-                "Der Eintrag liegt unter HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run.",
+            body.Children.Add(Card(Strings.Get("behavior.startTitle"),
+                Strings.Get("behavior.startNote"),
                 startup));
 
             RefreshAutostartState();
@@ -2519,9 +3066,9 @@ namespace DialMenu
                 string exe = Autostart.ExePath();
                 bool exists = !string.IsNullOrEmpty(exe) && File.Exists(exe);
                 _autostartPath.Text = string.IsNullOrEmpty(exe)
-                    ? "Programmpfad nicht ermittelbar."
-                    : exists ? "Programmdatei: " + exe
-                    : "Programmdatei fehlt: " + exe;
+                    ? Strings.Get("autostart.pathMissing")
+                    : exists ? Strings.Format("autostart.exe", exe)
+                    : Strings.Format("autostart.exeMissing", exe);
                 _autostartPath.Foreground = exists ? Ui.InkMuted : Ui.Warn;
             }
         }
@@ -2533,7 +3080,7 @@ namespace DialMenu
         FrameworkElement BuildAboutPage()
         {
             StackPanel body = PageBody();
-            body.Children.Add(PageHeader("Über DialMenu", null, null));
+            body.Children.Add(PageHeader(Strings.Get("about.title"), null, null));
 
             // Marke
             StackPanel brandBlock = new StackPanel();
@@ -2564,7 +3111,7 @@ namespace DialMenu
             TextBlock product = Ui.Heading("DialMenu", 15);
             brandText.Children.Add(product);
 
-            TextBlock tagline = Ui.Text("Der Drehregler als radiales Menü.", 12, Ui.InkMuted);
+            TextBlock tagline = Ui.Text(Strings.Get("about.tagline"), 12, Ui.InkMuted);
             tagline.Margin = new Thickness(0, 2, 0, 0);
             brandText.Children.Add(tagline);
 
@@ -2582,7 +3129,7 @@ namespace DialMenu
             // Speicherort
             StackPanel files = new StackPanel();
 
-            TextBlock configLabel = Ui.Text("Konfiguration", 11, Ui.InkMuted);
+            TextBlock configLabel = Ui.Text(Strings.Get("about.config"), 11, Ui.InkMuted);
             files.Children.Add(configLabel);
 
             TextBox configPath = Ui.TextField();
@@ -2592,7 +3139,7 @@ namespace DialMenu
             configPath.Margin = new Thickness(0, 4, 0, 0);
             files.Children.Add(configPath);
 
-            TextBlock logLabel = Ui.Text("Protokoll", 11, Ui.InkMuted);
+            TextBlock logLabel = Ui.Text(Strings.Get("about.log"), 11, Ui.InkMuted);
             logLabel.Margin = new Thickness(0, 12, 0, 0);
             files.Children.Add(logLabel);
 
@@ -2607,16 +3154,16 @@ namespace DialMenu
             fileButtons.Orientation = Orientation.Horizontal;
             fileButtons.Margin = new Thickness(0, 12, 0, 0);
 
-            Button openFolder = Ui.SmallButton("Ordner öffnen");
+            Button openFolder = Ui.SmallButton(Strings.Get("about.openFolder"));
             openFolder.Click += delegate { OpenPath(Config.Folder); };
             fileButtons.Children.Add(openFolder);
 
-            Button openLog = Ui.SmallButton("Protokoll öffnen");
+            Button openLog = Ui.SmallButton(Strings.Get("about.openLog"));
             openLog.Margin = new Thickness(6, 0, 0, 0);
             openLog.Click += delegate { OpenPath(Log.FilePath); };
             fileButtons.Children.Add(openLog);
 
-            Button copyConfig = Ui.SmallButton("Pfad kopieren");
+            Button copyConfig = Ui.SmallButton(Strings.Get("about.copyPath"));
             copyConfig.Margin = new Thickness(6, 0, 0, 0);
             copyConfig.Click += delegate
             {
@@ -2626,7 +3173,7 @@ namespace DialMenu
             fileButtons.Children.Add(copyConfig);
 
             files.Children.Add(fileButtons);
-            body.Children.Add(Card("Dateien", null, files));
+            body.Children.Add(Card(Strings.Get("about.files"), null, files));
 
             // Projekt
             StackPanel project = new StackPanel();
@@ -2636,29 +3183,27 @@ namespace DialMenu
             linkRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
             StackPanel linkText = new StackPanel();
-            TextBlock linkTitle = Ui.Text("Projektseite", 12.5, Ui.Ink);
+            TextBlock linkTitle = Ui.Text(Strings.Get("about.projectLink"), 12.5, Ui.Ink);
             linkText.Children.Add(linkTitle);
             TextBlock linkUrl = Ui.Text("github.com/dialmenu", 11.5, Ui.InkMuted);
             linkUrl.Margin = new Thickness(0, 2, 0, 0);
             linkText.Children.Add(linkUrl);
             linkRow.Children.Add(linkText);
 
-            Button openProject = Ui.SmallButton("Öffnen");
+            Button openProject = Ui.SmallButton(Strings.Get("about.open"));
             openProject.IsEnabled = false;
-            openProject.ToolTip = "Der Link wird mit der Veröffentlichung ergänzt.";
+            openProject.ToolTip = Strings.Get("about.linkPending");
             Grid.SetColumn(openProject, 1);
             linkRow.Children.Add(openProject);
 
             project.Children.Add(linkRow);
 
-            TextBlock note = Ui.Text(
-                "Die Tastatur selbst wird nicht verändert – DialMenu liest nur die Rohdaten des Reglers.",
-                11, Ui.InkMuted);
+            TextBlock note = Ui.Text(Strings.Get("about.projectNote"), 11, Ui.InkMuted);
             note.TextWrapping = TextWrapping.Wrap;
             note.Margin = new Thickness(0, 14, 0, 0);
             project.Children.Add(note);
 
-            body.Children.Add(Card("Projekt", null, project));
+            body.Children.Add(Card(Strings.Get("about.project"), null, project));
 
             return ScrollPage(body);
         }
@@ -2698,6 +3243,400 @@ namespace DialMenu
             {
                 Log.Write("Pfad konnte nicht geöffnet werden: " + ex.Message);
             }
+        }
+
+        // ==================================================================
+        // Ringvorschau auf der Seite "Befehle"
+        // ==================================================================
+
+        // Feste Breite der rechten Spalte. Sie zeigt denselben Ring wie das
+        // Overlay, nur klein und unbeweglich - zum Ansehen, nicht zum Klicken.
+        const double PreviewColumnWidth = 260;
+        // Unterhalb dieser Breite weicht die Vorschau, damit der Editor seine
+        // 320 px behaelt: 220 Liste + 12 + 320 Editor + 12 + 260 Vorschau.
+        const double PreviewMinBodyWidth = 824;
+
+        // Aussenradius im Zeichenfeld; das Overlay rechnet mit 122 bei
+        // Groesse 100 %, das sind hier rund 85 %.
+        const double PreviewOuter = 100;
+        const double PreviewPad = 12;
+        const int PreviewMaxSegments = 12;
+
+        FrameworkElement BuildRingPreviewPane()
+        {
+            StackPanel pane = new StackPanel();
+            pane.VerticalAlignment = VerticalAlignment.Top;
+
+            double inner = PreviewColumnWidth - PreviewPad * 2 - 2;
+
+            _previewWell = new Border();
+            _previewWell.Width = PreviewColumnWidth;
+            _previewWell.Height = PreviewColumnWidth;
+            _previewWell.Padding = new Thickness(PreviewPad);
+            _previewWell.CornerRadius = new CornerRadius(10);
+            _previewWell.BorderBrush = Ui.Line;
+            _previewWell.BorderThickness = new Thickness(1);
+            _previewWell.Background = Ui.Subtle;
+
+            _previewCanvas = new Canvas();
+            _previewCanvas.Width = inner;
+            _previewCanvas.Height = inner;
+            _previewCanvas.IsHitTestVisible = false;
+            _previewWell.Child = _previewCanvas;
+            pane.Children.Add(_previewWell);
+
+            TextBlock caption = Ui.Text(Strings.Get("commands.preview"), 11.5, Ui.InkSoft);
+            caption.Margin = new Thickness(2, 10, 0, 0);
+            caption.TextWrapping = TextWrapping.Wrap;
+            pane.Children.Add(caption);
+
+            _previewCount = Ui.Text("", 11, Ui.InkMuted);
+            _previewCount.Margin = new Thickness(2, 3, 0, 0);
+            _previewCount.TextTrimming = TextTrimming.CharacterEllipsis;
+            pane.Children.Add(_previewCount);
+
+            return pane;
+        }
+
+        // Zeichnet die Vorschau neu. Wird von RefreshActionList und von
+        // AfterEdit gerufen, also nach jeder Änderung an der Liste oder am
+        // bearbeiteten Befehl.
+        void RefreshRingPreview()
+        {
+            Canvas canvas = _previewCanvas;
+            if (canvas == null) return;
+
+            canvas.Children.Clear();
+
+            RingTheme theme = RingThemes.Get(_config.RingTheme, Appearance.IsLight(_config.Appearance));
+            if (_previewWell != null)
+            {
+                _previewWell.Background = Solid(theme.Ground);
+                _previewWell.BorderBrush = Solid(theme.IdleStrokeTop);
+            }
+
+            List<ActionItem> items = _profile != null && _profile.Actions != null
+                ? _profile.Actions : new List<ActionItem>();
+            int total = items.Count;
+            int n = Math.Min(total, PreviewMaxSegments);
+
+            double size = canvas.Width;
+            double cx = size / 2.0;
+            double cy = size / 2.0;
+            double rOut = PreviewOuter;
+            // Dicke und Radien wie im Overlay: 74 zu 122.
+            double rIn = rOut * (74.0 / 122.0);
+            double rMid = (rIn + rOut) / 2.0;
+
+            // Narbe: im Overlay ist sie rIn - 5 bei rIn = 74, hier im
+            // gleichen Verhältnis.
+            double hubR = rIn * (69.0 / 74.0);
+            double iconSize = Math.Max(12, 24 * 0.82 * (rOut - rIn) / 48.0);
+
+            // Grundring: die dunkle Fuge zwischen den Segmenten.
+            Path ground = new Path();
+            ground.Data = PreviewDonut(cx, cy, rIn - 3, rOut + 3);
+            ground.Fill = Solid(theme.Ground);
+            ground.Effect = new System.Windows.Media.Effects.DropShadowEffect
+            {
+                Color = Colors.Black,
+                BlurRadius = 16,
+                ShadowDepth = 4,
+                Direction = 270,
+                Opacity = theme.IsLight ? 0.26 : 0.60
+            };
+            canvas.Children.Add(ground);
+
+            // Lichtkanten aussen und innen.
+            Path rimOuter = new Path();
+            rimOuter.Data = new EllipseGeometry(new System.Windows.Point(cx, cy), rOut + 1.6, rOut + 1.6);
+            rimOuter.Stroke = Solid(theme.RimOuter);
+            rimOuter.StrokeThickness = 0.8;
+            canvas.Children.Add(rimOuter);
+
+            Path rimInner = new Path();
+            rimInner.Data = new EllipseGeometry(new System.Windows.Point(cx, cy), rIn - 1.4, rIn - 1.4);
+            rimInner.Stroke = Solid(theme.RimInner);
+            rimInner.StrokeThickness = 0.7;
+            canvas.Children.Add(rimInner);
+
+            Brush idleFill = Vertical(theme.IdleTop, theme.IdleBottom);
+            Brush idleStroke = Vertical(theme.IdleStrokeTop, theme.IdleStrokeBottom);
+            Brush gloss = Vertical(Color.FromArgb(0x30, 0xFF, 0xFF, 0xFF),
+                                   Color.FromArgb(0x00, 0xFF, 0xFF, 0xFF));
+
+            if (n > 0)
+            {
+                double step = 360.0 / n;
+                // Feste Fugenbreite auf dem mittleren Radius, wie im Overlay;
+                // bei vielen Segmenten bleibt ein Rest Abstand.
+                double gapDeg = Math.Min(step * 0.26, 2.4 / (rMid * Math.PI / 180.0));
+
+                for (int i = 0; i < n; i++)
+                {
+                    double a0 = -90 + i * step + gapDeg / 2.0;
+                    double a1 = -90 + (i + 1) * step - gapDeg / 2.0;
+
+                    Geometry geo = n == 1
+                        ? PreviewDonut(cx, cy, rIn, rOut)
+                        : PreviewSector(cx, cy, rIn, rOut, a0, a1, 3.4);
+
+                    bool active = i == 0;
+
+                    Path body = new Path();
+                    body.Data = geo;
+                    body.Fill = active ? Vertical(theme.ActiveTop, theme.ActiveBottom) : idleFill;
+                    body.Stroke = active ? Solid(theme.ActiveStroke) : idleStroke;
+                    body.StrokeThickness = active ? 1.4 : 0.9;
+                    if (active)
+                    {
+                        // Der Schein des ausgewaehlten Segments: im Dunkeln
+                        // weiss, im Hellen ein weicher Schatten.
+                        body.Effect = new System.Windows.Media.Effects.DropShadowEffect
+                        {
+                            Color = theme.GlowColor,
+                            BlurRadius = 14,
+                            ShadowDepth = 0,
+                            Opacity = theme.GlowOpacity
+                        };
+                    }
+                    canvas.Children.Add(body);
+
+                    // Glasreflex über der Ruhefläche; auf dem aktiven
+                    // Segment liegt er unter der Auswahl und bleibt unsichtbar.
+                    if (!active)
+                    {
+                        Path sheen = new Path();
+                        sheen.Data = geo;
+                        sheen.Fill = gloss;
+                        sheen.IsHitTestVisible = false;
+                        canvas.Children.Add(sheen);
+                    }
+
+                    // Symbol in der Mitte des Segments.
+                    double mid = -90 + (i + 0.5) * step;
+                    double radians = mid * Math.PI / 180.0;
+                    double px = cx + rMid * Math.Cos(radians);
+                    double py = cy + rMid * Math.Sin(radians);
+
+                    Viewbox box = new Viewbox();
+                    box.Width = iconSize;
+                    box.Height = iconSize;
+                    box.Child = PreviewIcon(
+                        IconLibrary.For(items[i]),
+                        Solid(active ? theme.IconActive : theme.IconIdle),
+                        active ? 1.75 : 1.6);
+                    Canvas.SetLeft(box, px - iconSize / 2.0);
+                    Canvas.SetTop(box, py - iconSize / 2.0);
+                    canvas.Children.Add(box);
+                }
+            }
+
+            BuildPreviewHub(canvas, theme, cx, cy, hubR, items, total);
+            UpdatePreviewCaption(total, n);
+        }
+
+        // Die Narbe: eingelassener Kreis mit Symbol und Namen des ersten
+        // Befehls, darunter der Zaehler - wie im Overlay.
+        void BuildPreviewHub(Canvas canvas, RingTheme theme, double cx, double cy,
+                             double hubR, List<ActionItem> items, int total)
+        {
+            double d = hubR * 2.0;
+
+            Grid host = new Grid();
+            host.Width = d;
+            host.Height = d;
+            host.IsHitTestVisible = false;
+
+            Ellipse body = new Ellipse();
+            RadialGradientBrush fill = new RadialGradientBrush(theme.CenterOuter, theme.CenterInner);
+            fill.Freeze();
+            body.Fill = fill;
+            host.Children.Add(body);
+
+            Ellipse sheen = new Ellipse();
+            sheen.Fill = Vertical(Color.FromArgb(0x1E, 0xFF, 0xFF, 0xFF),
+                                  Color.FromArgb(0x00, 0xFF, 0xFF, 0xFF));
+            host.Children.Add(sheen);
+
+            Ellipse rim = new Ellipse();
+            rim.Stroke = Vertical(theme.CenterRimTop, theme.CenterRimBottom);
+            rim.StrokeThickness = 1.1;
+            host.Children.Add(rim);
+
+            Ellipse inner = new Ellipse();
+            inner.Margin = new Thickness(5);
+            inner.Stroke = new SolidColorBrush(Color.FromArgb(0x2E, 0x00, 0x00, 0x00));
+            inner.StrokeThickness = 2.6;
+            host.Children.Add(inner);
+
+            StackPanel content = new StackPanel();
+            content.VerticalAlignment = VerticalAlignment.Center;
+            content.HorizontalAlignment = HorizontalAlignment.Center;
+            content.Margin = new Thickness(10, 0, 10, 0);
+
+            ActionItem first = items.Count > 0 ? items[0] : null;
+            string iconData = first != null ? IconLibrary.For(first) : IconLibrary.Gear;
+            double iconSide = Math.Max(18, hubR * 0.52);
+
+            Viewbox box = new Viewbox();
+            box.Width = iconSide;
+            box.Height = iconSide;
+            box.Child = PreviewIcon(iconData, Solid(first != null ? theme.IconActive : theme.TextMuted), 1.55);
+            box.HorizontalAlignment = HorizontalAlignment.Center;
+            box.Margin = new Thickness(0, 0, 0, 2);
+            content.Children.Add(box);
+
+            TextBlock name = new TextBlock();
+            name.FontFamily = new FontFamily("Segoe UI Variable Display, Segoe UI");
+            name.FontSize = Math.Max(9.5, hubR * 0.215);
+            name.FontWeight = FontWeights.SemiBold;
+            name.Foreground = Solid(theme.Text);
+            name.TextAlignment = TextAlignment.Center;
+            name.TextWrapping = TextWrapping.Wrap;
+            name.MaxWidth = hubR * 1.62;
+            name.LineHeight = name.FontSize * 1.25;
+            name.Text = first != null
+                ? (string.IsNullOrEmpty(first.Label) ? Strings.Get("commands.unnamed") : first.Label)
+                : Strings.Get("commands.previewEmpty");
+            content.Children.Add(name);
+
+            if (total > 0)
+            {
+                TextBlock counter = new TextBlock();
+                counter.FontFamily = new FontFamily("Segoe UI Variable Text, Segoe UI");
+                counter.FontSize = Math.Max(8, hubR * 0.135);
+                counter.Foreground = Solid(theme.TextMuted);
+                counter.TextAlignment = TextAlignment.Center;
+                counter.Margin = new Thickness(0, 4, 0, 0);
+                counter.Text = string.Format(CultureInfo.InvariantCulture,
+                    "{0:00} / {1:00}", 1, total);
+                content.Children.Add(counter);
+            }
+
+            host.Children.Add(content);
+
+            Canvas.SetLeft(host, cx - hubR);
+            Canvas.SetTop(host, cy - hubR);
+            canvas.Children.Add(host);
+        }
+
+        void UpdatePreviewCaption(int total, int shown)
+        {
+            if (_previewCount == null) return;
+
+            // Ohne Befehle steht der Hinweis schon in der Mitte - die Zeile
+            // darunter bleibt dann leer statt "leer" zu doppeln.
+            if (total == 0)
+            {
+                _previewCount.Text = "";
+                return;
+            }
+
+            string text = total == 1 ? Strings.Get("commands.countOne")
+                : Strings.Format("commands.countMany", total);
+
+            int hidden = total - shown;
+            if (hidden > 0)
+                text += "  ·  " + Strings.Format("commands.previewMore", hidden);
+
+            _previewCount.Text = text;
+        }
+
+        // Kreisausschnitt mit abgerundeten Ecken - dieselbe Konstruktion wie
+        // im Overlay, hier als eigene, kleine Fassung.
+        static Geometry PreviewSector(double cx, double cy, double rIn, double rOut,
+                                      double a0, double a1, double cr)
+        {
+            double sweep = a1 - a0;
+            double maxRadial = (rOut - rIn) / 2.0;
+            double maxArc = (rOut * Math.Abs(sweep) * Math.PI / 180.0) / 2.0;
+            cr = Math.Max(0, Math.Min(cr, Math.Min(maxRadial, maxArc) * 0.92));
+
+            System.Windows.Point A = PreviewPolar(cx, cy, rOut, a0);
+            System.Windows.Point B = PreviewPolar(cx, cy, rOut, a1);
+            System.Windows.Point C = PreviewPolar(cx, cy, rIn, a1);
+            System.Windows.Point D = PreviewPolar(cx, cy, rIn, a0);
+
+            Vector t0 = PreviewTangent(a0), t1 = PreviewTangent(a1);
+            Vector rad0 = PreviewRadial(a0), rad1 = PreviewRadial(a1);
+
+            System.Windows.Point A1 = A - rad0 * cr;
+            System.Windows.Point A2 = A + t0 * cr;
+            System.Windows.Point B1 = B - t1 * cr;
+            System.Windows.Point B2 = B - rad1 * cr;
+            System.Windows.Point C1 = C + rad1 * cr;
+            System.Windows.Point C2 = C - t1 * cr;
+            System.Windows.Point D1 = D + t0 * cr;
+            System.Windows.Point D2 = D + rad0 * cr;
+
+            bool large = Math.Abs(sweep) > 180;
+
+            PathFigure figure = new PathFigure();
+            figure.StartPoint = A2;
+            figure.IsClosed = true;
+            figure.Segments.Add(new ArcSegment(B1, new System.Windows.Size(rOut, rOut), 0, large, SweepDirection.Clockwise, true));
+            figure.Segments.Add(new QuadraticBezierSegment(B, B2, true));
+            figure.Segments.Add(new LineSegment(C1, true));
+            figure.Segments.Add(new QuadraticBezierSegment(C, C2, true));
+            figure.Segments.Add(new ArcSegment(D1, new System.Windows.Size(rIn, rIn), 0, large, SweepDirection.Counterclockwise, true));
+            figure.Segments.Add(new QuadraticBezierSegment(D, D2, true));
+            figure.Segments.Add(new LineSegment(A1, true));
+            figure.Segments.Add(new QuadraticBezierSegment(A, A2, true));
+
+            PathGeometry geometry = new PathGeometry();
+            geometry.Figures.Add(figure);
+            geometry.Freeze();
+            return geometry;
+        }
+
+        static Geometry PreviewDonut(double cx, double cy, double rIn, double rOut)
+        {
+            GeometryGroup group = new GeometryGroup();
+            group.FillRule = FillRule.EvenOdd;
+            group.Children.Add(new EllipseGeometry(new System.Windows.Point(cx, cy), rOut, rOut));
+            group.Children.Add(new EllipseGeometry(new System.Windows.Point(cx, cy), rIn, rIn));
+            group.Freeze();
+            return group;
+        }
+
+        static System.Windows.Point PreviewPolar(double cx, double cy, double r, double deg)
+        {
+            double a = deg * Math.PI / 180.0;
+            return new System.Windows.Point(cx + r * Math.Cos(a), cy + r * Math.Sin(a));
+        }
+
+        static Vector PreviewRadial(double deg)
+        {
+            double a = deg * Math.PI / 180.0;
+            return new Vector(Math.Cos(a), Math.Sin(a));
+        }
+
+        static Vector PreviewTangent(double deg)
+        {
+            double a = deg * Math.PI / 180.0;
+            return new Vector(-Math.Sin(a), Math.Cos(a));
+        }
+
+        static Path PreviewIcon(string data, Brush stroke, double thickness)
+        {
+            Path path = new Path();
+            try
+            {
+                path.Data = Geometry.Parse(data);
+            }
+            catch
+            {
+                try { path.Data = Geometry.Parse(IconLibrary.Gear); }
+                catch { path.Data = Geometry.Empty; }
+            }
+            path.Stroke = stroke;
+            path.StrokeThickness = thickness;
+            path.StrokeLineJoin = PenLineJoin.Round;
+            path.StrokeStartLineCap = PenLineCap.Round;
+            path.StrokeEndLineCap = PenLineCap.Round;
+            path.Fill = Brushes.Transparent;
+            return path;
         }
 
         // ==================================================================
@@ -2747,7 +3686,7 @@ namespace DialMenu
             _initial = current ?? "";
             _selected = _initial;
 
-            Title = "Symbol wählen";
+            Title = Strings.Get("icon.title");
             Width = 620;
             Height = 560;
             MinWidth = 480;
@@ -2776,10 +3715,9 @@ namespace DialMenu
             header.Padding = new Thickness(22, 16, 22, 14);
 
             StackPanel head = new StackPanel();
-            head.Children.Add(Ui.Heading("Symbol", 15));
+            head.Children.Add(Ui.Heading(Strings.Get("commands.icon"), 15));
 
-            TextBlock sub = Ui.Text("Ohne Auswahl bestimmt DialMenu das Symbol nach Art und Ziel.",
-                12, Ui.InkMuted);
+            TextBlock sub = Ui.Text(Strings.Get("icon.subtitle"), 12, Ui.InkMuted);
             sub.Margin = new Thickness(0, 2, 0, 0);
             head.Children.Add(sub);
 
@@ -2808,7 +3746,8 @@ namespace DialMenu
             _preview.Content = Ui.Glyph(PreviewData(), 22, Ui.Ink);
             chosen.Children.Add(_preview);
 
-            _name = Ui.Text(string.IsNullOrEmpty(_selected) ? "(automatisch)" : _selected, 12, Ui.InkSoft);
+            _name = Ui.Text(string.IsNullOrEmpty(_selected)
+                ? Strings.Get("icon.automatic") : _selected, 12, Ui.InkSoft);
             _name.Margin = new Thickness(10, 0, 0, 0);
             _name.VerticalAlignment = VerticalAlignment.Center;
             chosen.Children.Add(_name);
@@ -2818,9 +3757,9 @@ namespace DialMenu
             StackPanel buttons = new StackPanel();
             buttons.Orientation = Orientation.Horizontal;
 
-            Button clear = Ui.Button("Automatisch");
+            Button clear = Ui.Button(Strings.Get("icon.auto"));
             clear.Margin = new Thickness(0, 0, 8, 0);
-            clear.ToolTip = "Symbol wieder nach Art und Ziel bestimmen lassen.";
+            clear.ToolTip = Strings.Get("icon.autoTip");
             clear.Click += delegate
             {
                 _selected = "";
@@ -2828,12 +3767,12 @@ namespace DialMenu
             };
             buttons.Children.Add(clear);
 
-            Button cancel = Ui.Button("Abbrechen");
+            Button cancel = Ui.Button(Strings.Get("common.cancel"));
             cancel.Margin = new Thickness(0, 0, 8, 0);
             cancel.Click += delegate { DialogResult = false; };
             buttons.Children.Add(cancel);
 
-            Button apply = Ui.PrimaryButton("Übernehmen");
+            Button apply = Ui.PrimaryButton(Strings.Get("common.apply"));
             apply.IsDefault = true;
             apply.Click += delegate { DialogResult = true; };
             buttons.Children.Add(apply);
@@ -2868,7 +3807,7 @@ namespace DialMenu
 
             if (names.Count == 0)
             {
-                TextBlock empty = Ui.Text("Keine Symbole verfügbar.", 12, Ui.InkMuted);
+                TextBlock empty = Ui.Text(Strings.Get("icon.empty"), 12, Ui.InkMuted);
                 empty.Margin = new Thickness(4, 4, 0, 0);
                 grid.Children.Add(empty);
             }
@@ -2944,7 +3883,8 @@ namespace DialMenu
             {
                 _selected = name;
                 if (_preview != null) _preview.Content = Ui.Glyph(PreviewData(), 22, Ui.Ink);
-                if (_name != null) _name.Text = string.IsNullOrEmpty(name) ? "(automatisch)" : name;
+                if (_name != null) _name.Text = string.IsNullOrEmpty(name)
+                    ? Strings.Get("icon.automatic") : name;
                 RefreshTiles();
             };
             tile.MouseLeftButtonDown += delegate(object sender, MouseButtonEventArgs e)
