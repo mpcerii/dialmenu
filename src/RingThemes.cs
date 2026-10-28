@@ -101,16 +101,20 @@ namespace DialMenu
             RingTheme ink = new RingTheme();
             ink.Id = "ink";
             ink.Name = "Tinte";
-            ink.Note = "Fast reines Schwarz, hoher Kontrast";
-            ink.IdleTop = Color.FromRgb(0x1A, 0x1A, 0x1C);
-            ink.IdleBottom = Color.FromRgb(0x06, 0x06, 0x07);
-            ink.IdleStrokeTop = Color.FromRgb(0x3C, 0x3C, 0x40);
-            ink.ActiveTop = Color.FromRgb(0x2E, 0x2E, 0x32);
+            ink.Note = "Fast reines Schwarz, harter Kontrast";
+            ink.IdleTop = Color.FromRgb(0x16, 0x16, 0x18);
+            ink.IdleBottom = Color.FromRgb(0x03, 0x03, 0x04);
+            ink.IdleStrokeTop = Color.FromRgb(0x33, 0x33, 0x37);
+            ink.IdleStrokeBottom = Color.FromRgb(0x0C, 0x0C, 0x0E);
+            ink.ActiveTop = Color.FromRgb(0x2A, 0x2A, 0x2E);
+            ink.ActiveBottom = Color.FromRgb(0x14, 0x14, 0x17);
             ink.Ground = Color.FromRgb(0x00, 0x00, 0x00);
-            ink.CenterOuter = Color.FromRgb(0x10, 0x10, 0x12);
+            ink.CenterOuter = Color.FromRgb(0x0E, 0x0E, 0x10);
             ink.CenterInner = Color.FromRgb(0x00, 0x00, 0x00);
-            ink.CenterRimTop = Color.FromRgb(0x4A, 0x4A, 0x4E);
-            ink.IconIdle = Color.FromRgb(0x76, 0x76, 0x7C);
+            ink.CenterRimTop = Color.FromRgb(0x42, 0x42, 0x46);
+            ink.CenterRimBottom = Color.FromRgb(0x10, 0x10, 0x12);
+            ink.IconIdle = Color.FromRgb(0x6E, 0x6E, 0x74);
+            ink.TextMuted = Color.FromRgb(0x7E, 0x7E, 0x86);
             list.Add(ink);
 
             RingTheme warm = new RingTheme();
@@ -150,37 +154,130 @@ namespace DialMenu
             t.Note = dark.Note;
             t.IsLight = true;
 
+            // Jedes Thema bekommt ein eigenes helles Material. Frueher wurde
+            // nur zwischen "warm" und "alles andere" unterschieden - dadurch
+            // waren Graphit, Schiefer und Tinte im hellen Modus Pixel fuer
+            // Pixel gleich und die Auswahl bot dreimal dasselbe.
             bool warm = dark.Id == "warm";
             bool ink = dark.Id == "ink";
+            bool slate = dark.Id == "slate";
 
-            t.Ground = warm ? Color.FromRgb(0xF3, 0xF0, 0xEC) : Color.FromRgb(0xF2, 0xF2, 0xF4);
+            // Grundflaeche hinter dem Ring
+            if (warm) t.Ground = Color.FromRgb(0xF3, 0xF0, 0xEC);
+            else if (ink) t.Ground = Color.FromRgb(0xEF, 0xEF, 0xF1);
+            else if (slate) t.Ground = Color.FromRgb(0xEF, 0xF1, 0xF6);
+            else t.Ground = Color.FromRgb(0xF2, 0xF2, 0xF4);
 
-            t.IdleTop = warm ? Color.FromRgb(0xFF, 0xFF, 0xFF) : Color.FromRgb(0xFF, 0xFF, 0xFF);
-            t.IdleBottom = warm ? Color.FromRgb(0xEF, 0xEC, 0xE7) : Color.FromRgb(0xED, 0xED, 0xF0);
-            t.IdleStrokeTop = warm ? Color.FromRgb(0xD6, 0xD0, 0xC8) : Color.FromRgb(0xD8, 0xD8, 0xDD);
-            t.IdleStrokeBottom = warm ? Color.FromRgb(0xE8, 0xE4, 0xDE) : Color.FromRgb(0xE8, 0xE8, 0xEC);
+            // Segmentflaechen: alle nahe Weiss, damit das Milchglas bleibt,
+            // aber mit unterschiedlicher Kuehle bzw. Waerme.
+            if (warm)
+            {
+                t.IdleTop = Color.FromRgb(0xFF, 0xFF, 0xFF);
+                t.IdleBottom = Color.FromRgb(0xEF, 0xEC, 0xE7);
+                t.IdleStrokeTop = Color.FromRgb(0xD6, 0xD0, 0xC8);
+                t.IdleStrokeBottom = Color.FromRgb(0xE8, 0xE4, 0xDE);
+                t.ActiveBottom = Color.FromRgb(0xF6, 0xF3, 0xEE);
+            }
+            else if (ink)
+            {
+                // Tinte: kuehlstes, haertestes Weiss mit der staerksten Kante.
+                t.IdleTop = Color.FromRgb(0xFF, 0xFF, 0xFF);
+                t.IdleBottom = Color.FromRgb(0xEA, 0xEA, 0xEC);
+                t.IdleStrokeTop = Color.FromRgb(0xCE, 0xCE, 0xD1);
+                t.IdleStrokeBottom = Color.FromRgb(0xE4, 0xE4, 0xE7);
+                t.ActiveBottom = Color.FromRgb(0xF3, 0xF3, 0xF5);
+            }
+            else if (slate)
+            {
+                // Schiefer: leicht blaustichig.
+                t.IdleTop = Color.FromRgb(0xFF, 0xFF, 0xFF);
+                t.IdleBottom = Color.FromRgb(0xEB, 0xED, 0xF3);
+                t.IdleStrokeTop = Color.FromRgb(0xD2, 0xD6, 0xE0);
+                t.IdleStrokeBottom = Color.FromRgb(0xE6, 0xE9, 0xF0);
+                t.ActiveBottom = Color.FromRgb(0xF5, 0xF6, 0xFA);
+            }
+            else
+            {
+                // Graphit: neutrales Grau.
+                t.IdleTop = Color.FromRgb(0xFF, 0xFF, 0xFF);
+                t.IdleBottom = Color.FromRgb(0xED, 0xED, 0xF0);
+                t.IdleStrokeTop = Color.FromRgb(0xD8, 0xD8, 0xDD);
+                t.IdleStrokeBottom = Color.FromRgb(0xE8, 0xE8, 0xEC);
+                t.ActiveBottom = Color.FromRgb(0xF7, 0xF7, 0xF9);
+            }
 
-            t.ActiveTop = warm ? Color.FromRgb(0xFF, 0xFF, 0xFF) : Color.FromRgb(0xFF, 0xFF, 0xFF);
-            t.ActiveBottom = warm ? Color.FromRgb(0xF6, 0xF3, 0xEE) : Color.FromRgb(0xF7, 0xF7, 0xF9);
-            t.ActiveStroke = ink ? Color.FromRgb(0x1A, 0x1A, 0x1C)
-                : (warm ? Color.FromRgb(0x2A, 0x25, 0x20) : Color.FromRgb(0x1C, 0x1C, 0x20));
+            t.ActiveTop = Color.FromRgb(0xFF, 0xFF, 0xFF);
 
-            t.CenterOuter = warm ? Color.FromRgb(0xF7, 0xF5, 0xF1) : Color.FromRgb(0xF7, 0xF7, 0xF9);
-            t.CenterInner = warm ? Color.FromRgb(0xEA, 0xE6, 0xE0) : Color.FromRgb(0xE9, 0xE9, 0xED);
-            t.CenterRimTop = warm ? Color.FromRgb(0xCF, 0xC8, 0xBE) : Color.FromRgb(0xD0, 0xD0, 0xD6);
-            t.CenterRimBottom = warm ? Color.FromRgb(0xEE, 0xEA, 0xE4) : Color.FromRgb(0xEE, 0xEE, 0xF1);
+            // Die Kontur des gewaehlten Segments bleibt in jedem Thema fast
+            // schwarz: bei 1 px auf hellem Glas ist sie sonst nicht lesbar.
+            if (ink) t.ActiveStroke = Color.FromRgb(0x12, 0x12, 0x14);
+            else if (warm) t.ActiveStroke = Color.FromRgb(0x2A, 0x25, 0x20);
+            else if (slate) t.ActiveStroke = Color.FromRgb(0x1A, 0x1C, 0x22);
+            else t.ActiveStroke = Color.FromRgb(0x1C, 0x1C, 0x20);
 
-            t.IconIdle = warm ? Color.FromRgb(0x8A, 0x82, 0x78) : Color.FromRgb(0x8C, 0x8C, 0x94);
-            t.IconActive = warm ? Color.FromRgb(0x1F, 0x1B, 0x17) : Color.FromRgb(0x16, 0x16, 0x1A);
-            t.Text = warm ? Color.FromRgb(0x1F, 0x1B, 0x17) : Color.FromRgb(0x16, 0x16, 0x1A);
-            t.TextMuted = warm ? Color.FromRgb(0x8A, 0x82, 0x78) : Color.FromRgb(0x8C, 0x8C, 0x94);
+            // Mittelkreis
+            if (warm)
+            {
+                t.CenterOuter = Color.FromRgb(0xF7, 0xF5, 0xF1);
+                t.CenterInner = Color.FromRgb(0xEA, 0xE6, 0xE0);
+                t.CenterRimTop = Color.FromRgb(0xCF, 0xC8, 0xBE);
+                t.CenterRimBottom = Color.FromRgb(0xEE, 0xEA, 0xE4);
+                t.IconIdle = Color.FromRgb(0x8A, 0x82, 0x78);
+                t.IconActive = Color.FromRgb(0x1F, 0x1B, 0x17);
+                t.Text = Color.FromRgb(0x1F, 0x1B, 0x17);
+                t.TextMuted = Color.FromRgb(0x8A, 0x82, 0x78);
+                t.RimOuter = Color.FromArgb(0x44, 0xFF, 0xFF, 0xFF);
+                t.RimInner = Color.FromArgb(0x30, 0xBF, 0xB8, 0xAE);
+                t.Gloss = Color.FromArgb(0x3B, 0xFF, 0xFF, 0xFF);
+                t.GlowColor = Color.FromRgb(0x8A, 0x82, 0x78);
+            }
+            else if (ink)
+            {
+                t.CenterOuter = Color.FromRgb(0xF5, 0xF5, 0xF6);
+                t.CenterInner = Color.FromRgb(0xE6, 0xE6, 0xE8);
+                t.CenterRimTop = Color.FromRgb(0xC6, 0xC6, 0xCA);
+                t.CenterRimBottom = Color.FromRgb(0xED, 0xED, 0xEF);
+                t.IconIdle = Color.FromRgb(0x80, 0x80, 0x86);
+                t.IconActive = Color.FromRgb(0x10, 0x10, 0x12);
+                t.Text = Color.FromRgb(0x10, 0x10, 0x12);
+                t.TextMuted = Color.FromRgb(0x80, 0x80, 0x86);
+                t.RimOuter = Color.FromArgb(0x4E, 0xFF, 0xFF, 0xFF);
+                t.RimInner = Color.FromArgb(0x3C, 0xB8, 0xB8, 0xBE);
+                t.Gloss = Color.FromArgb(0x44, 0xFF, 0xFF, 0xFF);
+                t.GlowColor = Color.FromRgb(0x80, 0x80, 0x86);
+            }
+            else if (slate)
+            {
+                t.CenterOuter = Color.FromRgb(0xF5, 0xF7, 0xFB);
+                t.CenterInner = Color.FromRgb(0xE7, 0xEA, 0xF2);
+                t.CenterRimTop = Color.FromRgb(0xC9, 0xCF, 0xDD);
+                t.CenterRimBottom = Color.FromRgb(0xEC, 0xEF, 0xF5);
+                t.IconIdle = Color.FromRgb(0x84, 0x8A, 0x98);
+                t.IconActive = Color.FromRgb(0x14, 0x17, 0x1F);
+                t.Text = Color.FromRgb(0x14, 0x17, 0x1F);
+                t.TextMuted = Color.FromRgb(0x84, 0x8A, 0x98);
+                t.RimOuter = Color.FromArgb(0x4C, 0xFF, 0xFF, 0xFF);
+                t.RimInner = Color.FromArgb(0x3A, 0xB8, 0xC2, 0xD8);
+                t.Gloss = Color.FromArgb(0x40, 0xFF, 0xFF, 0xFF);
+                t.GlowColor = Color.FromRgb(0x88, 0x90, 0xA4);
+            }
+            else
+            {
+                t.CenterOuter = Color.FromRgb(0xF7, 0xF7, 0xF9);
+                t.CenterInner = Color.FromRgb(0xE9, 0xE9, 0xED);
+                t.CenterRimTop = Color.FromRgb(0xD0, 0xD0, 0xD6);
+                t.CenterRimBottom = Color.FromRgb(0xEE, 0xEE, 0xF1);
+                t.IconIdle = Color.FromRgb(0x8C, 0x8C, 0x94);
+                t.IconActive = Color.FromRgb(0x16, 0x16, 0x1A);
+                t.Text = Color.FromRgb(0x16, 0x16, 0x1A);
+                t.TextMuted = Color.FromRgb(0x8C, 0x8C, 0x94);
+                t.RimOuter = Color.FromArgb(0x50, 0xFF, 0xFF, 0xFF);
+                t.RimInner = Color.FromArgb(0x38, 0xC0, 0xC0, 0xC8);
+                t.Gloss = Color.FromArgb(0x42, 0xFF, 0xFF, 0xFF);
+                t.GlowColor = Color.FromRgb(0x90, 0x90, 0x98);
+            }
 
-            t.RimOuter = warm ? Color.FromArgb(0x44, 0xFF, 0xFF, 0xFF) : Color.FromArgb(0x50, 0xFF, 0xFF, 0xFF);
-            t.RimInner = warm ? Color.FromArgb(0x30, 0xBF, 0xB8, 0xAE) : Color.FromArgb(0x38, 0xC0, 0xC0, 0xC8);
-            t.Gloss = warm ? Color.FromArgb(0x3B, 0xFF, 0xFF, 0xFF) : Color.FromArgb(0x42, 0xFF, 0xFF, 0xFF);
-
-            // Der Schein ist im Hellen ein Schatten, kein Leuchten.
-            t.GlowColor = warm ? Color.FromRgb(0x8A, 0x82, 0x78) : Color.FromRgb(0x90, 0x90, 0x98);
+            // Im Hellen ist der Schein ein weicher Schatten, kein Leuchten.
             t.GlowOpacity = 0.30;
 
             return t;
