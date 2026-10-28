@@ -12,3 +12,6 @@ config.json
 # Werkzeuge
 scratch*/
 *.png
+
+# Bilder fuer README und Ankuendigung gehoeren ins Repo
+!docs/*.png
