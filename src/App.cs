@@ -523,39 +523,50 @@ namespace DialMenu
         [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
         static extern bool DestroyIcon(IntPtr handle);
 
+        // Traegt dasselbe Zeichen wie die Wortmarke im Fenster: acht
+        // Ringsegmente mit Punkt, hell auf dunklem Grund, damit es im
+        // Infobereich auch bei heller Taskleiste lesbar bleibt.
         public static Icon Create()
         {
-            using (Bitmap bmp = new Bitmap(32, 32))
+            const int Size = 32;
+
+            using (System.Drawing.Bitmap bmp = new System.Drawing.Bitmap(Size, Size))
             {
-                using (Graphics g = Graphics.FromImage(bmp))
+                using (System.Drawing.Graphics g = System.Drawing.Graphics.FromImage(bmp))
                 {
                     g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-                    g.Clear(Color.Transparent);
+                    g.Clear(System.Drawing.Color.Transparent);
 
-                    using (SolidBrush disc = new SolidBrush(Color.FromArgb(0x15, 0x17, 0x1C)))
-                        g.FillEllipse(disc, 0.5f, 0.5f, 31f, 31f);
+                    float cx = Size / 2f;
+                    float cy = Size / 2f;
+                    float radius = 10.6f;
+                    float thickness = 3.1f;
+                    float dot = 3.4f;
+                    int segments = 8;
+                    float gapDegrees = 17f;
 
-                    using (Pen tick = new Pen(Color.FromArgb(0x7B, 0x83, 0x93), 1.5f))
+                    using (System.Drawing.Pen pen = new System.Drawing.Pen(
+                        System.Drawing.Color.FromArgb(0xF2, 0xF2, 0xF4), thickness))
                     {
-                        for (int i = 0; i < 12; i++)
+                        pen.StartCap = System.Drawing.Drawing2D.LineCap.Round;
+                        pen.EndCap = System.Drawing.Drawing2D.LineCap.Round;
+
+                        // Boegen einzeln zeichnen, damit die Luecken entstehen.
+                        System.Drawing.RectangleF box = new System.Drawing.RectangleF(
+                            cx - radius, cy - radius, radius * 2f, radius * 2f);
+
+                        for (int i = 0; i < segments; i++)
                         {
-                            double a = i * Math.PI / 6.0;
-                            float x1 = 16f + (float)(Math.Cos(a) * 9.2);
-                            float y1 = 16f + (float)(Math.Sin(a) * 9.2);
-                            float x2 = 16f + (float)(Math.Cos(a) * 11.1);
-                            float y2 = 16f + (float)(Math.Sin(a) * 11.1);
-                            g.DrawLine(tick, x1, y1, x2, y2);
+                            float start = (i * (360f / segments)) + (gapDegrees / 2f) - 90f;
+                            float sweep = (360f / segments) - gapDegrees;
+                            g.DrawArc(pen, box, start, sweep);
                         }
                     }
 
-                    using (Pen ring = new Pen(Color.FromArgb(0xF1, 0xF2, 0xF6), 1.8f))
-                        g.DrawEllipse(ring, 7.4f, 7.4f, 17.2f, 17.2f);
-
-                    using (Pen pointer = new Pen(Color.FromArgb(0x8E, 0xA6, 0xFF), 2.8f))
+                    using (System.Drawing.SolidBrush brush = new System.Drawing.SolidBrush(
+                        System.Drawing.Color.FromArgb(0xF2, 0xF2, 0xF4)))
                     {
-                        pointer.StartCap = System.Drawing.Drawing2D.LineCap.Round;
-                        pointer.EndCap = System.Drawing.Drawing2D.LineCap.Round;
-                        g.DrawLine(pointer, 16f, 16f, 16f, 10.2f);
+                        g.FillEllipse(brush, cx - dot / 2f, cy - dot / 2f, dot, dot);
                     }
                 }
 

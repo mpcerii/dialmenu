@@ -775,11 +775,11 @@ namespace DialMenu
             return b;
         }
 
-        static Drawing CreateDrawing()
+        static Drawing CreateDrawing(Brush ink)
         {
             DrawingGroup group = new DrawingGroup();
 
-            Pen pen = new Pen(Ink, StrokeWidth);
+            Pen pen = new Pen(ink, StrokeWidth);
             pen.StartLineCap = PenLineCap.Round;
             pen.EndLineCap = PenLineCap.Round;
             pen.LineJoin = PenLineJoin.Round;
@@ -789,7 +789,7 @@ namespace DialMenu
 
             EllipseGeometry dot = new EllipseGeometry(new Point(Grid / 2.0, Grid / 2.0), DotRadius, DotRadius);
             dot.Freeze();
-            group.Children.Add(new GeometryDrawing(Ink, null, dot));
+            group.Children.Add(new GeometryDrawing(ink, null, dot));
 
             group.Freeze();
             return group;
@@ -831,7 +831,16 @@ namespace DialMenu
         // Fertiges, eingefrorenes Bild fuer die Oberflaeche.
         public static DrawingImage Create()
         {
-            DrawingImage image = new DrawingImage(CreateDrawing());
+            DrawingImage image = new DrawingImage(CreateDrawing(Ink));
+            image.Freeze();
+            return image;
+        }
+
+        // Fuer dunkle Flaechen: Ring und Punkt in Weiss.
+        public static DrawingImage CreateLight()
+        {
+            Brush light = Freeze(new SolidColorBrush(Color.FromRgb(0xF4, 0xF4, 0xF6)));
+            DrawingImage image = new DrawingImage(CreateDrawing(light));
             image.Freeze();
             return image;
         }
@@ -839,9 +848,14 @@ namespace DialMenu
         // Dieselbe Marke als PNG in der gewuenschten Pixelgroesse.
         public static BitmapSource CreatePng(int size)
         {
+            return CreatePng(size, Ink);
+        }
+
+        public static BitmapSource CreatePng(int size, Brush brush)
+        {
             if (size <= 0) size = 256;
 
-            Drawing drawing = CreateDrawing();
+            Drawing drawing = CreateDrawing(brush);
             double scale = size / Grid;
 
             DrawingVisual visual = new DrawingVisual();

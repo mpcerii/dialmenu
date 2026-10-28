@@ -184,24 +184,36 @@ namespace DialMenu
             DockPanel panel = new DockPanel();
             panel.LastChildFill = true;
 
-            // Wortmarke
+            // Wortmarke: das Zeichen aus acht Ringsegmenten, wie das Menue selbst.
             StackPanel brand = new StackPanel();
             brand.Orientation = Orientation.Horizontal;
-            brand.Margin = new Thickness(16, 20, 16, 20);
+            brand.Margin = new Thickness(18, 22, 18, 22);
 
-            ContentControl brandIcon = new ContentControl();
-            brandIcon.Content = Ui.Glyph(GlyphDial, 20, Ui.Ink);
+            // Die Marke als Bild in fester Groesse. Ein ContentControl allein
+            // nimmt die natuergroesse des Zeichens (24 Einheiten) und wird
+            // dadurch beschnitten.
+            System.Windows.Controls.Image brandIcon = new System.Windows.Controls.Image();
+            brandIcon.Source = BrandMark.Create();
+            brandIcon.Width = 24;
+            brandIcon.Height = 24;
+            brandIcon.Stretch = Stretch.Uniform;
+            brandIcon.SnapsToDevicePixels = true;
             brandIcon.VerticalAlignment = VerticalAlignment.Center;
             brand.Children.Add(brandIcon);
 
+            StackPanel wordBlock = new StackPanel();
+            wordBlock.VerticalAlignment = VerticalAlignment.Center;
+            wordBlock.Margin = new Thickness(10, 0, 0, 0);
+
             TextBlock wordmark = new TextBlock();
             wordmark.Text = "DialMenu";
-            wordmark.FontSize = 14.5;
+            wordmark.FontSize = 15;
             wordmark.FontWeight = FontWeights.SemiBold;
             wordmark.Foreground = Ui.Ink;
-            wordmark.VerticalAlignment = VerticalAlignment.Center;
-            wordmark.Margin = new Thickness(8, 0, 0, 0);
-            brand.Children.Add(wordmark);
+            wordmark.LineHeight = 17;
+            wordBlock.Children.Add(wordmark);
+
+            brand.Children.Add(wordBlock);
 
             DockPanel.SetDock(brand, Dock.Top);
             panel.Children.Add(brand);
@@ -591,7 +603,7 @@ namespace DialMenu
                 "          <RepeatButton.Template>" +
                 "            <ControlTemplate TargetType='RepeatButton'>" +
                 "              <Border Height='4' CornerRadius='2' VerticalAlignment='Center'" +
-                "                      Background='#3B57C8'/>" +
+                "                      Background='#1C1C20'/>" +
                 "            </ControlTemplate>" +
                 "          </RepeatButton.Template>" +
                 "        </RepeatButton>" +
@@ -2531,11 +2543,15 @@ namespace DialMenu
             mark.Width = 48;
             mark.Height = 48;
             mark.CornerRadius = new CornerRadius(10);
-            mark.Background = new SolidColorBrush(Color.FromRgb(0x17, 0x19, 0x1E));
+            mark.Background = Tokens.Primary;
             mark.VerticalAlignment = VerticalAlignment.Top;
 
-            ContentControl markIcon = new ContentControl();
-            markIcon.Content = Ui.Glyph(GlyphDial, 26, Brushes.White);
+            // Dieselbe Marke wie links oben, nur hell auf dunklem Feld.
+            System.Windows.Controls.Image markIcon = new System.Windows.Controls.Image();
+            markIcon.Source = BrandMark.CreateLight();
+            markIcon.Width = 26;
+            markIcon.Height = 26;
+            markIcon.Stretch = Stretch.Uniform;
             markIcon.HorizontalAlignment = HorizontalAlignment.Center;
             markIcon.VerticalAlignment = VerticalAlignment.Center;
             mark.Child = markIcon;

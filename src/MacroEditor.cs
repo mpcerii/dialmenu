@@ -15,12 +15,12 @@ namespace DialMenu
         static readonly Brush Bg = new SolidColorBrush(Color.FromRgb(0xFA, 0xFB, 0xFC));
         static readonly Brush Card = Brushes.White;
         static readonly Brush Line = new SolidColorBrush(Color.FromRgb(0xE6, 0xE8, 0xEC));
-        static readonly Brush Ink = new SolidColorBrush(Color.FromRgb(0x17, 0x19, 0x1E));
-        static readonly Brush InkSoft = new SolidColorBrush(Color.FromRgb(0x5B, 0x61, 0x6E));
-        static readonly Brush InkMuted = new SolidColorBrush(Color.FromRgb(0x8C, 0x92, 0x9E));
-        static readonly Brush FieldLine = new SolidColorBrush(Color.FromRgb(0xD7, 0xDA, 0xE0));
-        static readonly Brush Accent = new SolidColorBrush(Color.FromRgb(0x3B, 0x57, 0xC8));
-        static readonly Brush AccentSoft = new SolidColorBrush(Color.FromRgb(0xEE, 0xF1, 0xFC));
+        static readonly Brush Ink = Tokens.Ink;
+        static readonly Brush InkSoft = Tokens.InkSoft;
+        static readonly Brush InkMuted = Tokens.InkMuted;
+        static readonly Brush FieldLine = Tokens.LineStrong;
+        static readonly Brush Accent = Tokens.Primary;
+        static readonly Brush AccentSoft = Tokens.Selected;
 
         internal static readonly string[] Types = { "hotkey", "text", "delay", "program" };
         internal static readonly string[] TypeLabels = { "Tastenkombination", "Text", "Pause", "Programm" };
@@ -569,24 +569,26 @@ namespace DialMenu
 
     internal static class Ui
     {
-        public static readonly Brush Bg = new SolidColorBrush(Color.FromRgb(0xFA, 0xFB, 0xFC));
-        public static readonly Brush Card = Brushes.White;
-        public static readonly Brush Line = new SolidColorBrush(Color.FromRgb(0xE6, 0xE8, 0xEC));
-        public static readonly Brush FieldLine = new SolidColorBrush(Color.FromRgb(0xD7, 0xDA, 0xE0));
-        public static readonly Brush Ink = new SolidColorBrush(Color.FromRgb(0x17, 0x19, 0x1E));
-        public static readonly Brush InkSoft = new SolidColorBrush(Color.FromRgb(0x5B, 0x61, 0x6E));
-        public static readonly Brush InkMuted = new SolidColorBrush(Color.FromRgb(0x8C, 0x92, 0x9E));
-        public static readonly Brush Accent = new SolidColorBrush(Color.FromRgb(0x3B, 0x57, 0xC8));
-        public static readonly Brush AccentSoft = new SolidColorBrush(Color.FromRgb(0xEE, 0xF1, 0xFC));
-        public static readonly Brush Warn = new SolidColorBrush(Color.FromRgb(0x8A, 0x5A, 0x12));
-        public static readonly Brush WarnSoft = new SolidColorBrush(Color.FromRgb(0xFD, 0xF6, 0xE7));
-        public static readonly Brush Subtle = new SolidColorBrush(Color.FromRgb(0xF4, 0xF5, 0xF8));
+        public static readonly Brush Bg = Tokens.Canvas;
+        public static readonly Brush Card = Tokens.Surface;
+        public static readonly Brush Line = Tokens.Line;
+        public static readonly Brush FieldLine = Tokens.LineStrong;
+        public static readonly Brush Ink = Tokens.Ink;
+        public static readonly Brush InkSoft = Tokens.InkSoft;
+        public static readonly Brush InkMuted = Tokens.InkMuted;
+        public static readonly Brush Accent = Tokens.Primary;
+        public static readonly Brush AccentSoft = Tokens.Selected;
+        public static readonly Brush Warn = Tokens.Warn;
+        public static readonly Brush WarnSoft = Tokens.WarnSoft;
+        public static readonly Brush Subtle = Tokens.Recess;
 
         public static TextBlock Text(string value, double size, Brush brush)
         {
             TextBlock t = new TextBlock();
             t.Text = value;
-            t.FontSize = size;
+            // Unter 12 ist am Bildschirm muehsam zu lesen. Hinweise werden
+            // deshalb angehoben, ohne die Abstufung ganz aufzugeben.
+            t.FontSize = size < 12 ? 12 : size;
             t.Foreground = brush;
             return t;
         }

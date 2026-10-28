@@ -6,6 +6,7 @@
     <AssemblyName>DialMenu</AssemblyName>
     <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
+    <ApplicationIcon>src\app.ico</ApplicationIcon>
     <StartupObject>DialMenu.DialMenuApp</StartupObject>
     <LangVersion>5</LangVersion>
     <PlatformTarget>AnyCPU</PlatformTarget>
@@ -50,8 +51,8 @@
 
   <ItemGroup>
     <Compile Include="src\Core.cs" />
-    <Compile Include="src\Presets.cs" />
-    <Compile Include="src\Commands.cs" />
+    <Compile Include="src\Tokens.cs" />
+    <Compile Include="src\Presets.cs" />    <Compile Include="src\Commands.cs" />
     <Compile Include="src\Discord.cs" />
     <Compile Include="src\IconLibrary.cs" />
     <Compile Include="src\InputEngine.cs" />
@@ -60,6 +61,10 @@
     <Compile Include="src\PresetWindow.cs" />
     <Compile Include="src\MacroEditor.cs" />
     <Compile Include="src\App.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="src\app.ico" />
   </ItemGroup>
 
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
