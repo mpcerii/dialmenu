@@ -118,43 +118,17 @@ namespace DialMenu
 
             RebuildKnobs();
 
-            try
-            {
-                _sink = new SinkWindow();
-                _sink.Current = this;
-                _sink.CreateSink();
-            }
-            catch (Exception ex)
-            {
-                Log.Write("Sink-Fenster fehlgeschlagen: " + ex.Message);
-                _sink = null;
-            }
-
             _hookProc = HookCallback;
-            _hook = SetWindowsHookEx(WH_KEYBOARD_LL, _hookProc, GetModuleHandle(null), 0);
-            Log.Write("Hook installiert: " + (_hook != IntPtr.Zero)
-                + " Fehler=" + Marshal.GetLastWin32Error());
 
-            RAWINPUTDEVICE[] devices = new RAWINPUTDEVICE[2];
+            // Hook und Raw-Input-Fenster gehoeren zusammen auf einen eigenen
+            // Thread. Laeuft beides auf dem Oberflaechen-Thread, dann stauen
+            // sich die Dreh-Reports, solange dort gezeichnet wird - der
+            // Tastendruck kommt dann beim Hook an, bevor der zugehoerige
+            // Report vermerkt ist, und die Lautstaerke aendert sich trotzdem.
+            StartHookThread();
 
-            // Ohne Fenster kann Raw Input nicht zugestellt werden; der Hook
-            // laeuft trotzdem weiter.
-            IntPtr target = _sink != null ? _sink.Handle : IntPtr.Zero;
-
-            devices[0].usUsagePage = 0x01; // Tastatur
-            devices[0].usUsage = 0x06;
-            devices[0].dwFlags = RIDEV_INPUTSINK;
-            devices[0].hwndTarget = target;
-
-            devices[1].usUsagePage = 0x0C; // Verbrauchersteuerung
-            devices[1].usUsage = 0x01;
-            devices[1].dwFlags = RIDEV_INPUTSINK;
-            devices[1].hwndTarget = target;
-
-            bool ok = RegisterRawInputDevices(devices, (uint)devices.Length,
-                (uint)Marshal.SizeOf(typeof(RAWINPUTDEVICE)));
-            Log.Write("Raw Input registriert: " + ok
-                + " Fehler=" + Marshal.GetLastWin32Error());
+            // Auf das Fenster warten, es entsteht im Hook-Thread.
+            _sinkReady.WaitOne(3000);
 
             LogDeviceSummary();
 
@@ -176,12 +150,7 @@ namespace DialMenu
             if (_disposed) return;
             _disposed = true;
 
-            if (_hook != IntPtr.Zero)
-            {
-                UnhookWindowsHookEx(_hook);
-                _hook = IntPtr.Zero;
-            }
-
+            StopHookThread();
             if (_buttonWatchdog != null)
             {
                 try { _buttonWatchdog.Dispose(); } catch { }
@@ -203,9 +172,127 @@ namespace DialMenu
             }
         }
 
-        // Baut aus der Konfiguration die aktiven Geraete neu auf.
-        void RebuildKnobs()
+        // ------------------------------------------------------------------
+        // Hook-Thread
+        // ------------------------------------------------------------------
+
+        const uint WM_QUIT = 0x0012;
+        const uint WM_APP_STOP = 0x8000;
+
+        Thread _hookThread;
+        uint _hookThreadId;
+        readonly ManualResetEvent _hookReady = new ManualResetEvent(false);
+        readonly ManualResetEvent _sinkReady = new ManualResetEvent(false);
+
+        void StartHookThread()
         {
+            _hookThread = new Thread(HookThreadMain);
+            _hookThread.IsBackground = true;
+            _hookThread.Name = "DialMenu.Hook";
+            _hookThread.Start();
+
+            // Auf die Installation warten, damit der Aufrufer weiss, ob es
+            // geklappt hat.
+            _hookReady.WaitOne(2000);
+        }
+
+        void StopHookThread()
+        {
+            if (_hookThreadId != 0)
+                PostThreadMessage(_hookThreadId, WM_APP_STOP, IntPtr.Zero, IntPtr.Zero);
+
+            if (_hookThread != null)
+            {
+                try { _hookThread.Join(1500); } catch { }
+                _hookThread = null;
+            }
+        }
+
+        void HookThreadMain()
+        {
+            try
+            {
+                _hookThreadId = GetCurrentThreadId();
+
+                _hook = SetWindowsHookEx(WH_KEYBOARD_LL, _hookProc, GetModuleHandle(null), 0);
+                Log.Write("Hook installiert: " + (_hook != IntPtr.Zero)
+                    + " Fehler=" + Marshal.GetLastWin32Error()
+                    + " (eigener Thread " + _hookThreadId + ")");
+            }
+            catch (Exception ex)
+            {
+                Log.Write("Hook-Thread: " + ex.Message);
+            }
+            finally
+            {
+                _hookReady.Set();
+            }
+
+            // Raw Input braucht ein Fenster, das Nachrichten empfaengt. Es
+            // entsteht hier, damit die Reports auf demselben unbelasteten
+            // Thread ankommen wie der Hook.
+            try
+            {
+                _sink = new SinkWindow();
+                _sink.Current = this;
+                _sink.CreateSink();
+
+                RAWINPUTDEVICE[] devices = new RAWINPUTDEVICE[2];
+
+                devices[0].usUsagePage = 0x01; // Tastatur
+                devices[0].usUsage = 0x06;
+                devices[0].dwFlags = RIDEV_INPUTSINK;
+                devices[0].hwndTarget = _sink.Handle;
+
+                devices[1].usUsagePage = 0x0C; // Verbrauchersteuerung
+                devices[1].usUsage = 0x01;
+                devices[1].dwFlags = RIDEV_INPUTSINK;
+                devices[1].hwndTarget = _sink.Handle;
+
+                bool ok = RegisterRawInputDevices(devices, (uint)devices.Length,
+                    (uint)Marshal.SizeOf(typeof(RAWINPUTDEVICE)));
+                Log.Write("Raw Input registriert: " + ok
+                    + " Fehler=" + Marshal.GetLastWin32Error()
+                    + " (Hook-Thread)");
+            }
+            catch (Exception ex)
+            {
+                Log.Write("Sink-Fenster fehlgeschlagen: " + ex.Message);
+                _sink = null;
+            }
+            finally
+            {
+                _sinkReady.Set();
+            }
+
+            // Nachrichtenschleife: sie haelt den Thread ansprechbar, damit
+            // Windows den Hook nie wegen Zeitueberschreitung verwirft, und
+            // stellt die Raw-Input-Reports zu.
+            MSG msg;
+            while (GetMessage(out msg, IntPtr.Zero, 0, 0) > 0)
+            {
+                if (msg.message == WM_APP_STOP) break;
+                TranslateMessage(ref msg);
+                DispatchMessage(ref msg);
+            }
+
+            if (_sink != null)
+            {
+                _sink.Current = null;
+                try { _sink.DestroyHandle(); } catch { }
+                _sink = null;
+            }
+
+            if (_hook != IntPtr.Zero)
+            {
+                UnhookWindowsHookEx(_hook);
+                _hook = IntPtr.Zero;
+                Log.Write("Hook entfernt");
+            }
+        }
+
+        // Baut aus der Konfiguration die aktiven Geraete neu auf.
+        void RebuildKnobs()        {
             List<KnobRuntime> fresh = new List<KnobRuntime>();
             Config cfg = _config;
 
@@ -375,6 +462,11 @@ namespace DialMenu
         static int MatchScore(string match, string name)
         {
             if (string.IsNullOrEmpty(match) || string.IsNullOrEmpty(name)) return -1;
+
+            // Ein Muster ohne echte Kennung wuerde jedes Geraet treffen - dann
+            // landen fremde Lautstaerketasten im Hook und die Lautstaerke
+            // aendert sich trotz laufendem DialMenu.
+            if (match.Contains("VID_0000") || match.Contains("PID_0000")) return -1;
 
             string[] parts = match.Split('&');
             int used = 0;
@@ -1154,6 +1246,39 @@ namespace DialMenu
 
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
         static extern IntPtr GetModuleHandle(string name);
+
+        [StructLayout(LayoutKind.Sequential)]
+        struct POINT
+        {
+            public int X;
+            public int Y;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        struct MSG
+        {
+            public IntPtr hwnd;
+            public uint message;
+            public IntPtr wParam;
+            public IntPtr lParam;
+            public uint time;
+            public POINT pt;
+        }
+
+        [DllImport("user32.dll")]
+        static extern int GetMessage(out MSG lpMsg, IntPtr hWnd, uint wMsgFilterMin, uint wMsgFilterMax);
+
+        [DllImport("user32.dll")]
+        static extern bool TranslateMessage(ref MSG lpMsg);
+
+        [DllImport("user32.dll")]
+        static extern IntPtr DispatchMessage(ref MSG lpMsg);
+
+        [DllImport("user32.dll")]
+        static extern bool PostThreadMessage(uint idThread, uint msg, IntPtr wParam, IntPtr lParam);
+
+        [DllImport("kernel32.dll")]
+        static extern uint GetCurrentThreadId();
 
         [DllImport("user32.dll", SetLastError = true)]
         static extern bool RegisterRawInputDevices(RAWINPUTDEVICE[] devices, uint count, uint size);

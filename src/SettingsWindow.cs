@@ -2017,11 +2017,24 @@ namespace DialMenu
 
             bool configured = FindBinding(device) != null;
 
-            Button action = Ui.SmallButton(configured ? "Eingerichtet" : "Hinzufügen");
-            action.IsEnabled = !configured;
+            // Geraete ohne Vendor-/Product-ID lassen sich nicht zuverlaessig
+            // wiedererkennen. Sie wuerden jedes Geraet treffen und fremde
+            // Lautstaerketasten abfangen.
+            bool addressable = !string.IsNullOrEmpty(device.Match)
+                && !device.Match.Contains("VID_0000")
+                && !device.Match.Contains("PID_0000");
+
+            Button action = Ui.SmallButton(configured ? "Eingerichtet"
+                : (addressable ? "Hinzufügen" : "Nicht wählbar"));
+            action.IsEnabled = !configured && addressable;
+            if (!addressable)
+                action.ToolTip = "Dieses Gerät meldet keine eigene Kennung. "
+                    + "Es lässt sich nicht zuverlässig wiedererkennen.";
             action.HorizontalAlignment = HorizontalAlignment.Right;
             action.Click += delegate
             {
+                if (!addressable) return;
+
                 DeviceBinding binding = new DeviceBinding();
                 binding.Name = name;
                 binding.Match = device.Match;
