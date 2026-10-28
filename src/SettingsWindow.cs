@@ -2005,10 +2005,168 @@ namespace DialMenu
             body.Children.Add(Card(Strings.Get("devices.configured"),
                 Strings.Get("devices.configuredNote"), configured));
 
+            // Assistent: den Knopf durch eine feste Bewegung erkennen lassen.
+            body.Children.Add(Card(Strings.Get("devices.learnTitle"),
+                Strings.Get("devices.learnNote"), BuildLearnBlock()));
+
             RebuildConfiguredDevices();
             StartDiscovery();
 
             return ScrollPage(body);
+        }
+
+        // ------------------------------------------------------------------
+        // Lernassistent
+        // ------------------------------------------------------------------
+
+        KnobLearn _learner;
+        TextBlock _learnState;
+        TextBlock _learnResult;
+        Button _learnStart;
+
+        FrameworkElement BuildLearnBlock()
+        {
+            StackPanel block = new StackPanel();
+
+            _learnState = Ui.Text("", 12, Ui.InkSoft);
+            _learnState.TextWrapping = TextWrapping.Wrap;
+            _learnState.Margin = new Thickness(0, 0, 0, 10);
+            block.Children.Add(_learnState);
+
+            _learnStart = Ui.PrimaryButton(Strings.Get("devices.learnStart"));
+            _learnStart.HorizontalAlignment = HorizontalAlignment.Left;
+            _learnStart.Click += delegate
+            {
+                if (_learner != null && _learner.Active) StopLearning();
+                else StartLearning();
+            };
+            block.Children.Add(_learnStart);
+
+            _learnResult = Ui.Text("", 11.5, Ui.InkMuted);
+            _learnResult.TextWrapping = TextWrapping.Wrap;
+            _learnResult.Margin = new Thickness(0, 10, 0, 0);
+            block.Children.Add(_learnResult);
+
+            return block;
+        }
+
+        void StartLearning()
+        {
+            _learner = new KnobLearn();
+
+            _learner.Progress += delegate(string state)
+            {
+                Dispatcher.BeginInvoke(new Action(delegate
+                {
+                    if (_learnState == null) return;
+                    _learnState.Text = state;
+                }));
+            };
+
+            _learner.Completed += delegate(KnobResult result)
+            {
+                Dispatcher.BeginInvoke(new Action(delegate { ApplyLearned(result); }));
+            };
+
+            _learner.Start();
+
+            // Die Engine hoert jetzt an allen Geräten mit.
+            InputEngine engine = _app != null ? _app.Engine : null;
+            if (engine != null) engine.Learner = _learner;
+
+            if (_learnStart != null)
+            {
+                _learnStart.Content = Strings.Get("devices.learnStop");
+                _learnStart.Background = Ui.Card;
+                _learnStart.Foreground = Ui.Ink;
+            }
+            if (_learnState != null) _learnState.Text = Strings.Get("devices.learnWaiting");
+            if (_learnResult != null) _learnResult.Text = "";
+        }
+
+        void StopLearning()
+        {
+            if (_learner != null) _learner.Stop();
+
+            InputEngine engine = _app != null ? _app.Engine : null;
+            if (engine != null) engine.Learner = null;
+
+            if (_learnStart != null)
+            {
+                _learnStart.Content = Strings.Get("devices.learnStart");
+                _learnStart.Background = Ui.Accent;
+                _learnStart.Foreground = Tokens.PrimaryText;
+            }
+        }
+
+        void ApplyLearned(KnobResult result)
+        {
+            StopLearning();
+
+            if (result == null)
+            {
+                if (_learnResult != null) _learnResult.Text = Strings.Get("devices.learnFailed");
+                return;
+            }
+
+            if (!result.IsUsable)
+            {
+                if (_learnResult != null)
+                    _learnResult.Text = Strings.Get("devices.learnNoId") + " " + result.DevicePath;
+                return;
+            }
+
+            // Bereits eingerichtet?
+            DeviceBinding existing = FindBindingByMatch(result.Match);
+            if (existing != null)
+            {
+                existing.Enabled = true;
+                if (!string.IsNullOrEmpty(result.FriendlyName)) existing.Name = result.FriendlyName;
+                SetReports(existing, result);
+            }
+            else
+            {
+                DeviceBinding binding = new DeviceBinding();
+                binding.Name = result.FriendlyName;
+                binding.Match = result.Match;
+                binding.Enabled = true;
+                SetReports(binding, result);
+                _config.Devices.Add(binding);
+            }
+
+            if (_learnResult != null)
+                _learnResult.Text = Strings.Get("devices.learnDone") + " " + result.Match;
+            if (_learnState != null)
+                _learnState.Text = Strings.Get("devices.learnDoneHint");
+
+            Push();
+            RebuildConfiguredDevices();
+        }
+
+        // Die gelernten Codes als Reports eintragen, damit die Engine sie
+        // wiedererkennt. Reihenfolge: rechts, links, Druck.
+        static void SetReports(DeviceBinding binding, KnobResult result)
+        {
+            binding.Reports = new List<string>();
+            binding.Reports.Add(CodeFromKey(result.RightCode));
+            binding.Reports.Add(CodeFromKey(result.LeftCode));
+            binding.Reports.Add(CodeFromKey(result.PressCode));
+        }
+
+        // "02E900" -> "E9": der bedeutungstragende Teil des Reports.
+        static string CodeFromKey(string key)
+        {
+            if (string.IsNullOrEmpty(key)) return "";
+            if (key.Length >= 4) return key.Substring(2, 2);
+            return key;
+        }
+
+        DeviceBinding FindBindingByMatch(string match)
+        {
+            if (string.IsNullOrEmpty(match) || _config == null) return null;
+            foreach (DeviceBinding b in _config.Devices)
+                if (string.Equals(b.Match, match, StringComparison.OrdinalIgnoreCase)) return b;
+            return null;
         }
 
         void StartDiscovery()

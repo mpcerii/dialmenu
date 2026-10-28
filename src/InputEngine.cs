@@ -67,6 +67,9 @@ namespace DialMenu
         public event Action LongPressed;
         public event Action Activity;
 
+        // Gesetzt, solange der Lernassistent nach dem Knopf sucht.
+        public KnobLearn Learner;
+
         Config _config;
         SinkWindow _sink;
         IntPtr _hook;
@@ -399,8 +402,12 @@ namespace DialMenu
                     string deviceName = DeviceName(device);
                     if (string.IsNullOrEmpty(deviceName)) return;
 
+                    // Rohdaten fuer den Lernassistenten sammeln: dort werden
+                    // ALLE Geraete gebraucht, nicht nur die eingerichteten.
+                    KnobLearn learner = Learner;
                     KnobRuntime rt = FindKnob(deviceName);
-                    if (rt == null) return; // nicht konfiguriert: komplett ignorieren
+
+                    if (learner == null && rt == null) return; // nicht konfiguriert: ignorieren
 
                     uint reportSize = (uint)Marshal.ReadInt32(buffer, (int)headerSize);
                     uint reportCount = (uint)Marshal.ReadInt32(buffer, (int)headerSize + 4);
@@ -414,6 +421,10 @@ namespace DialMenu
                     byte[] data = new byte[length];
                     Marshal.Copy(new IntPtr(buffer.ToInt64() + headerSize + hidHeader),
                         data, 0, length);
+
+                    if (learner != null) learner.OnReport(deviceName, data);
+
+                    if (rt == null) return; // nur zuhoeren, nicht auswerten
 
                     RememberReport(data);
 

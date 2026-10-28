@@ -226,6 +226,10 @@ namespace DialMenu
 
         public Config CurrentConfig { get { return _config; } }
 
+        // Die Eingabe-Engine, damit die Einstellungen den Lernassistenten
+        // anschliessen koennen.
+        public InputEngine Engine { get { return _input; } }
+
         public bool IsExiting { get { return _exiting; } }
 
         // Speichert sofort und schiebt die Aenderung in Eingabe und Overlay.
