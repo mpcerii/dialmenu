@@ -270,7 +270,6 @@ namespace DialMenu
             de["devices.searching"] = "Suche läuft …";
             de["devices.attached"] = "Angeschlossen";
             de["devices.configured"] = "Eingerichtet";
-            de["devices.addStandard"] = "Standard-Gerät hinzufügen (ISY IGK-6500)";
             de["devices.configuredNote"] = "Nur eingerichtete und aktivierte Geräte lösen das Menü aus.";
             de["devices.learnTitle"] = "Tastatur automatisch erkennen";
             de["devices.learnNote"] = "DialMenu kann den Drehregler selbst finden, ohne dass du Kennungen eintragen musst. Du drehst dabei nur am Regler und drückst ihn einmal.";
@@ -281,6 +280,8 @@ namespace DialMenu
             de["devices.learnDoneHint"] = "Fertig. Du kannst den Regler jetzt benutzen.";
             de["devices.learnFailed"] = "Das Muster wurde nicht erkannt. Bitte noch einmal starten.";
             de["devices.learnNoId"] = "Das Gerät meldet keine eigene Kennung und lässt sich nicht zuverlässig wiedererkennen:";
+            de["devices.learnProgress"] = "Rechts {0}/{1}  ·  Links {2}/{3}  ·  Drücken {4}/{5}";
+            de["devices.learnDetected"] = "Erkannt: rechts {0}, links {1}, Druck {2}";
             de["devices.foundNone"] = "Kein passendes Eingabegerät gefunden.";
             de["devices.foundOne"] = "1 Gerät gefunden";
             de["devices.foundMany"] = "{0} Geräte gefunden";
@@ -300,7 +301,6 @@ namespace DialMenu
             de["devices.detachedState"] = "  ·  nicht angeschlossen";
             de["devices.enabled"] = "Aktiv";
             de["devices.none"] = "Noch kein Gerät eingerichtet.";
-            de["devices.standardAlready"] = "Das Standard-Gerät ist bereits eingerichtet.";
 
             de["appearance.title"] = "Darstellung";
             de["appearance.subtitle"] = "Wo und wie der Ring erscheint.";
@@ -729,7 +729,6 @@ namespace DialMenu
             en["devices.searching"] = "Searching …";
             en["devices.attached"] = "Connected";
             en["devices.configured"] = "Set up";
-            en["devices.addStandard"] = "Add the standard device (ISY IGK-6500)";
             en["devices.configuredNote"] = "Only set-up and enabled devices trigger the menu.";
             en["devices.learnTitle"] = "Detect your keyboard automatically";
             en["devices.learnNote"] = "DialMenu can find the dial itself, so you do not have to enter any IDs. You only turn the dial and press it once.";
@@ -740,6 +739,8 @@ namespace DialMenu
             en["devices.learnDoneHint"] = "Done. You can use the dial now.";
             en["devices.learnFailed"] = "The pattern was not recognised. Please start again.";
             en["devices.learnNoId"] = "This device reports no identifier and cannot be recognised reliably:";
+            en["devices.learnProgress"] = "Right {0}/{1}  ·  Left {2}/{3}  ·  Press {4}/{5}";
+            en["devices.learnDetected"] = "Detected: right {0}, left {1}, press {2}";
             en["devices.foundNone"] = "No matching input device found.";
             en["devices.foundOne"] = "1 device found";
             en["devices.foundMany"] = "{0} devices found";
@@ -759,7 +760,6 @@ namespace DialMenu
             en["devices.detachedState"] = "  ·  not connected";
             en["devices.enabled"] = "Enabled";
             en["devices.none"] = "No device set up yet.";
-            en["devices.standardAlready"] = "The standard device is already set up.";
 
             en["appearance.title"] = "Appearance";
             en["appearance.subtitle"] = "Where and how the ring appears.";

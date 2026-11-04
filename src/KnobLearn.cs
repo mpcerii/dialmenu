@@ -156,7 +156,17 @@ namespace DialMenu
         // Sucht am Ende der Aufzeichnung das Muster rechts^n, links^m, Druck^1.
         // Es wird bewusst von hinten gesucht: der Nutzer darf vorher daneben
         // gedreht haben, ohne dass die Erkennung scheitert.
+        //
+        // Der Fortschritt wird hier gemeldet, nicht in FindPattern: dort
+        // verlassen die "noch nicht vollstaendig"-Pfade die Methode frueh,
+        // und die Anzeige blieb bis zum Schluss leer.
         void TryComplete()
+        {
+            FindPattern();
+            if (Active) Report(StateText());
+        }
+
+        void FindPattern()
         {
             KnobResult found = null;
 
@@ -245,10 +255,7 @@ namespace DialMenu
             {
                 Report(buildState(found));
                 if (Completed != null) Completed(found);
-                return;
             }
-
-            Report(StateText());
         }
 
         void Report(string state)
@@ -289,16 +296,14 @@ namespace DialMenu
                     }
                 }
 
-                return "rechts " + right + "/" + RightSteps
-                    + " · links " + left + "/" + LeftSteps
-                    + " · " + (press > 0 ? "Druck erkannt" : "Druck offen");
+                return Strings.Format("devices.learnProgress",
+                    right, RightSteps, left, LeftSteps, press, PressSteps);
             }
         }
 
         static string buildState(KnobResult r)
         {
-            return "erkannt: rechts " + r.RightCode + ", links " + r.LeftCode
-                + ", Druck " + r.PressCode + " (" + r.RightCount + "/" + r.LeftCount + "/" + r.PressCount + ")";
+            return Strings.Format("devices.learnDetected", r.RightCode, r.LeftCode, r.PressCode);
         }
 
         // Aus dem Geraetepfad die Kennung ziehen, die der Konfiguration genuegt.
