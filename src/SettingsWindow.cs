@@ -1996,12 +1996,6 @@ namespace DialMenu
             _configuredRows = new StackPanel();
             configured.Children.Add(_configuredRows);
 
-            Button addPreset = Ui.Button(Strings.Get("devices.addStandard"));
-            addPreset.HorizontalAlignment = HorizontalAlignment.Left;
-            addPreset.Margin = new Thickness(0, 12, 0, 0);
-            addPreset.Click += delegate { AddStandardDevice(); };
-            configured.Children.Add(addPreset);
-
             body.Children.Add(Card(Strings.Get("devices.configured"),
                 Strings.Get("devices.configuredNote"), configured));
 
@@ -2058,8 +2052,10 @@ namespace DialMenu
             {
                 Dispatcher.BeginInvoke(new Action(delegate
                 {
-                    if (_learnState == null) return;
-                    _learnState.Text = state;
+                    // Anleitung stehen lassen, Fortschritt darunter zeigen.
+                    // Ein leerer Zustand (Start) darf die Anleitung nicht loeschen.
+                    if (_learnState == null || string.IsNullOrEmpty(state)) return;
+                    _learnState.Text = Strings.Get("devices.learnWaiting") + "\n\n" + state;
                 }));
             };
 
@@ -2492,28 +2488,6 @@ namespace DialMenu
                 if (string.Equals(device.Match, binding.Match, StringComparison.OrdinalIgnoreCase))
                     return true;
             return false;
-        }
-
-        void AddStandardDevice()
-        {
-            foreach (DeviceBinding binding in _config.Devices)
-            {
-                if (binding.Match == "VID_258A&PID_017E")
-                {
-                    MessageBox.Show(Strings.Get("devices.standardAlready"),
-                        "DialMenu", MessageBoxButton.OK, MessageBoxImage.Information);
-                    return;
-                }
-            }
-
-            DeviceBinding standard = new DeviceBinding();
-            standard.Name = "ISY IGK-6500";
-            standard.Match = "VID_258A&PID_017E";
-            standard.Enabled = true;
-            _config.Devices.Add(standard);
-            Push();
-            RebuildConfiguredDevices();
-            RenderDiscoveredDevices();
         }
 
         // ==================================================================

@@ -72,8 +72,8 @@ namespace DialMenu
     public class DeviceBinding
     {
         [DataMember] public string Id = Guid.NewGuid().ToString("N");
-        [DataMember] public string Name = "ISY IGK-6500";
-        [DataMember] public string Match = "VID_258A&PID_017E";
+        [DataMember] public string Name = "";
+        [DataMember] public string Match = "";
         [DataMember] public bool Enabled = true;
 
         // Rohe HID-Reports dieses Geraets, falls bekannt.
@@ -213,14 +213,6 @@ namespace DialMenu
                     if (string.IsNullOrEmpty(a.Id)) a.Id = Guid.NewGuid().ToString("N");
             }
 
-            if (Devices.Count == 0)
-            {
-                DeviceBinding d = new DeviceBinding();
-                d.Name = "ISY IGK-6500";
-                d.Match = "VID_258A&PID_017E";
-                Devices.Add(d);
-            }
-
             if (string.IsNullOrEmpty(ActiveProfileId) && Profiles.Count > 0)
                 ActiveProfileId = Profiles[0].Id;
 
@@ -268,12 +260,9 @@ namespace DialMenu
 
         public static Config CreateDefault()
         {
+            // Keine Geraete vorab: der Knopf wird ueber den Assistenten
+            // (Geraete -> Erkennung starten) eingerichtet.
             Config c = new Config();
-
-            DeviceBinding dev = new DeviceBinding();
-            dev.Name = "ISY IGK-6500";
-            dev.Match = "VID_258A&PID_017E";
-            c.Devices.Add(dev);
 
             Profile main = new Profile();
             main.Name = "Hauptprofil";

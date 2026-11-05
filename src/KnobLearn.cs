@@ -54,6 +54,7 @@ namespace DialMenu
             {
                 _steps.Clear();
                 _seenDevices.Clear();
+                _prefixes.Clear();
                 Result = null;
                 Active = true;
             }
@@ -82,6 +83,12 @@ namespace DialMenu
             {
                 if (!Active) return;
 
+                // Geraete mit Report-ID (z. B. "03 E9 00") melden das
+                // Loslassen als "03 00 00". Das ist kein Schritt: sonst
+                // wechseln sich Dreh- und Loslass-Reports ab und kein Band
+                // erreicht zwei gleiche Schritte.
+                if (IsRelease(devicePath, data)) return;
+
                 _seenDevices.Add(devicePath);
 
                 Step step = new Step();
@@ -96,6 +103,36 @@ namespace DialMenu
             }
 
             TryComplete();
+        }
+
+        // Erste Bytes, die ein Geraet schon mit Inhalt dahinter geschickt hat.
+        // Kommt dasselbe erste Byte mit leerem Rest, ist es eine Report-ID
+        // und der Report ein Loslassen. Ohne Report-ID (z. B. "E9 00") taucht
+        // das erste Byte nie mit Inhalt dahinter auf und zaehlt weiter.
+        readonly Dictionary<string, HashSet<byte>> _prefixes =
+            new Dictionary<string, HashSet<byte>>();
+
+        bool IsRelease(string device, byte[] data)
+        {
+            if (data.Length < 2) return false;
+
+            bool restEmpty = true;
+            for (int i = 1; i < data.Length; i++)
+                if (data[i] != 0x00) { restEmpty = false; break; }
+
+            HashSet<byte> seen;
+            if (!_prefixes.TryGetValue(device, out seen))
+            {
+                seen = new HashSet<byte>();
+                _prefixes[device] = seen;
+            }
+
+            if (!restEmpty)
+            {
+                seen.Add(data[0]);
+                return false;
+            }
+            return seen.Contains(data[0]);
         }
 
         static bool HasSignal(byte[] data)
@@ -119,7 +156,17 @@ namespace DialMenu
         // Sucht am Ende der Aufzeichnung das Muster rechts^n, links^m, Druck^1.
         // Es wird bewusst von hinten gesucht: der Nutzer darf vorher daneben
         // gedreht haben, ohne dass die Erkennung scheitert.
+        //
+        // Der Fortschritt wird hier gemeldet, nicht in FindPattern: dort
+        // verlassen die "noch nicht vollstaendig"-Pfade die Methode frueh,
+        // und die Anzeige blieb bis zum Schluss leer.
         void TryComplete()
+        {
+            FindPattern();
+            if (Active) Report(StateText());
+        }
+
+        void FindPattern()
         {
             KnobResult found = null;
 
@@ -208,10 +255,7 @@ namespace DialMenu
             {
                 Report(buildState(found));
                 if (Completed != null) Completed(found);
-                return;
             }
-
-            Report(StateText());
         }
 
         void Report(string state)
@@ -252,16 +296,14 @@ namespace DialMenu
                     }
                 }
 
-                return "rechts " + right + "/" + RightSteps
-                    + " · links " + left + "/" + LeftSteps
-                    + " · " + (press > 0 ? "Druck erkannt" : "Druck offen");
+                return Strings.Format("devices.learnProgress",
+                    right, RightSteps, left, LeftSteps, press, PressSteps);
             }
         }
 
         static string buildState(KnobResult r)
         {
-            return "erkannt: rechts " + r.RightCode + ", links " + r.LeftCode
-                + ", Druck " + r.PressCode + " (" + r.RightCount + "/" + r.LeftCount + "/" + r.PressCount + ")";
+            return Strings.Format("devices.learnDetected", r.RightCode, r.LeftCode, r.PressCode);
         }
 
         // Aus dem Geraetepfad die Kennung ziehen, die der Konfiguration genuegt.

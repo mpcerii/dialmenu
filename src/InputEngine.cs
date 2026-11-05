@@ -43,6 +43,7 @@ namespace DialMenu
         const int VK_VOLUP = 0xAF;
         const int VK_VOLDN = 0xAE;
         const int VK_MUTE = 0xAD;
+        const int VK_PLAYPAUSE = 0xB3; // manche Knoepfe senden beim Druecken Play/Pause (0xCD)
 
         // Aktionen der Reports, absichtlich nicht die rohen Codes, damit
         // Geraete mit eigenen Codes dieselbe Logik benutzen koennen.
@@ -509,6 +510,15 @@ namespace DialMenu
                 return code == 0x00 || rt.Map.ContainsKey(code);
             }
 
+            // Andere Report-ID (z. B. 0x03) mit leerem Rest: Loslassen.
+            if (data[0] != 0x00 && data.Length >= 2 && !rt.Map.ContainsKey(data[0]))
+            {
+                bool empty = true;
+                for (int i = 1; i < data.Length; i++)
+                    if (data[i] != 0x00) { empty = false; break; }
+                if (empty) return true; // code bleibt 0 = Loslassen
+            }
+
             // Layout ohne Report-ID: erstes Byte traegt den Code.
             if (data[0] == 0x00) return true;
             if (rt.Map.ContainsKey(data[0]))
@@ -725,7 +735,7 @@ namespace DialMenu
                     lParam, typeof(KBDLLHOOKSTRUCT));
                 int vk = (int)info.vkCode;
 
-                if (vk != VK_VOLUP && vk != VK_VOLDN && vk != VK_MUTE)
+                if (vk != VK_VOLUP && vk != VK_VOLDN && vk != VK_MUTE && vk != VK_PLAYPAUSE)
                     return CallNextHookEx(_hook, nCode, wParam, lParam);
 
                 // Selbst erzeugte Tasten (Lautstaerke-Aktionen der App) nie fressen.
